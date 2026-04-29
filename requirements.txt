@@ -1,0 +1,5 @@
+langgraph
+google-generativeai
+streamlit
+fpdf2
+python-dotenv
