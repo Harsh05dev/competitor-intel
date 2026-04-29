@@ -1,8 +1,9 @@
 import os
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=False)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-MODEL_NAME = "gemini-2.0-flash"
+# Keep model configurable from .env for quick quota/workaround switches.
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 EVALUATION_THRESHOLD = 75
 MAX_ITERATIONS = 3
 EVAL_WEIGHTS = {
