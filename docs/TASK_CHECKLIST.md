@@ -12,12 +12,12 @@
 - [ ] **OWNER: ___** | Skim Coursera "Fundamentals of Building AI Agents" (optional, for vocabulary)
 
 ### Environment Setup (Day 6-7)
-- [ ] **OWNER: ___** | Create GitHub repo with branch structure (main + one branch per person)
-- [ ] **OWNER: ___** | Write initial requirements.txt (langgraph, google-generativeai, streamlit, fpdf2)
-- [ ] **OWNER: ___** | Get Gemini API key and test a basic call (text generation, no search)
-- [ ] **OWNER: ___** | Test Gemini with Google Search Grounding enabled (verify search works)
-- [ ] **OWNER: ___** | Build a tiny 2-node LangGraph as practice (input → process → output with conditional edge)
-- [ ] **OWNER: ___** | Create the project folder structure (all empty files in place)
+- [x] **OWNER: Harsh** | Create GitHub repo with branch structure (main + one branch per person)
+- [x] **OWNER: Harsh** | Write initial requirements.txt (langgraph, google-generativeai, streamlit, fpdf2)
+- [ ] **OWNER: Harsh** | Get Gemini API key and test a basic call (text generation, no search) **BLOCKED:** `.env` still has placeholder key
+- [ ] **OWNER: Harsh** | Test Gemini with Google Search Grounding enabled (verify search works) **BLOCKED:** `.env` still has placeholder key
+- [x] **OWNER: Harsh** | Build a tiny 2-node LangGraph as practice (input → process → output with conditional edge)
+- [x] **OWNER: Harsh** | Create the project folder structure (all empty files in place)
 
 ---
 
