@@ -4,11 +4,11 @@ load_dotenv(override=False)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 _DEFAULT_MODEL_CANDIDATES = [
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash-lite",
     "gemini-2.0-flash-lite",
     "gemini-2.0-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3-flash-preview",
 ]
 
 
@@ -32,7 +32,8 @@ def get_model_candidates() -> list[str]:
     return deduped
 
 
-MODEL_NAME = get_model_candidates()[0]
+# Main app/runtime model should be explicit and predictable.
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 EVALUATION_THRESHOLD = 75
 MAX_ITERATIONS = 3
 EVAL_WEIGHTS = {
