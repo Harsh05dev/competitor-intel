@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config import get_model_candidates
+import config
 
 
 def main() -> None:
@@ -25,7 +25,15 @@ def main() -> None:
     client = genai.Client(api_key=gemini_api_key)
     search_tool = types.Tool(google_search=types.GoogleSearch())
 
-    models = get_model_candidates()
+    seen: set[str] = set()
+    models: list[str] = []
+    for name in (
+        config.MODEL_NAME,
+        "gemini-2.5-flash-lite",
+    ):
+        if name and name not in seen:
+            models.append(name)
+            seen.add(name)
     last_error: Exception | None = None
     saw_quota_error = False
     saw_invalid_model_or_tool = False

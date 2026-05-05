@@ -66,7 +66,6 @@ class EvaluationBreakdown(TypedDict):
     funding_data: ScoreDetail
     hiring_signals: ScoreDetail
     swot_depth: ScoreDetail
-    recency: ScoreDetail
 
 
 class EvaluationResult(TypedDict):
