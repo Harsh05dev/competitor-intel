@@ -4,6 +4,7 @@ Clean rewrite: sidebar always accessible, native selectbox, demo/live toggle, th
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import sys, os, time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -19,6 +20,32 @@ st.set_page_config(
 for k, v in [("theme", "dark"), ("mode", "demo")]:
     if k not in st.session_state:
         st.session_state[k] = v
+
+# First load of a session: expand sidebar (Streamlit may restore "collapsed" from the browser).
+if not st.session_state.get("_sidebar_session_opened"):
+    st.session_state._sidebar_session_opened = True
+    components.html(
+        """
+        <script>
+        (function () {
+            try {
+                function tryExpand() {
+                    var doc = window.parent.document;
+                    var btn = doc.querySelector('button[data-testid="collapsedControl"]');
+                    if (btn) {
+                        var r = btn.getBoundingClientRect();
+                        if (r.width > 0 && r.height > 0) { btn.click(); }
+                    }
+                }
+                tryExpand();
+                setTimeout(tryExpand, 250);
+            } catch (e) {}
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 DARK = st.session_state.theme == "dark"
 DEMO = st.session_state.mode  == "demo"
@@ -39,31 +66,54 @@ else:
 
 ACC_BG  = f"{ACCENT}18"
 ACC_BOR = f"{ACCENT}55"
+MODE_BADGE_COLOR = ACCENT if DEMO else RED
+MODE_BADGE_BG = ACC_BG if DEMO else f"{RED}22"
+MODE_BADGE_BORDER = ACC_BOR if DEMO else f"{RED}55"
 
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;600;700&display=swap');
 
-/* CRITICAL: keep header transparent but in DOM so sidebar toggle works */
+/* Header must keep real height — height:0 clips Streamlit's sidebar control */
 header[data-testid="stHeader"] {{
     background: transparent !important;
-    height: 0px !important;
-    min-height: 0px !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 999990 !important;
+    height: auto !important;
+    min-height: 2.75rem !important;
+    padding: 0.35rem 0 0 0 !important;
     overflow: visible !important;
 }}
 
-/* Make sidebar reopen arrow bright and visible */
+/* Collapsed sidebar: fixed chevron so it is never clipped or flush with viewport top */
 button[data-testid="collapsedControl"] {{
-    background: {ACCENT}22 !important;
-    border: 1px solid {ACCENT}80 !important;
-    border-radius: 0 8px 8px 0 !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: clamp(5rem, 14vh, 7.5rem) !important;
+    z-index: 999999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: {ACC_BG} !important;
+    border: 2px solid {ACCENT} !important;
+    border-left: none !important;
+    border-radius: 0 10px 10px 0 !important;
     color: {ACCENT} !important;
+    min-width: 2.5rem !important;
+    width: 2.5rem !important;
+    min-height: 3.75rem !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0.35rem !important;
     opacity: 1 !important;
     visibility: visible !important;
-    display: flex !important;
-    width: 1.6rem !important;
-    min-height: 3.5rem !important;
-    margin-top: 4rem !important;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5) !important;
+}}
+button[data-testid="collapsedControl"] svg,
+button[data-testid="collapsedControl"] img {{
+    width: 1.35rem !important;
+    height: 1.35rem !important;
 }}
 
 #MainMenu {{ visibility: hidden; }}
@@ -303,6 +353,10 @@ COMPANY_MAP = {
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{ACCENT};letter-spacing:0.22em;text-transform:uppercase;padding-bottom:1.1rem;border-bottom:1px solid {BORDER};margin-bottom:1.3rem;">⚡ Competitor Intel</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<p style="font-size:0.6rem;color:{TEXT4};margin:-0.6rem 0 1rem 0;line-height:1.4;">Opens automatically on each visit. If you collapse the sidebar, use the <span style="color:{ACCENT};font-weight:600;">teal «</span> tab on the left — it stays fixed and fully visible.</p>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem;">Mode</div>', unsafe_allow_html=True)
     mc1, mc2 = st.columns(2)
@@ -345,7 +399,7 @@ st.markdown(f"""
     <div style="font-family:Space Mono,monospace;font-size:1.2rem;font-weight:700;color:{TEXT};">Competitor Intel</div>
     <div style="font-family:Space Mono,monospace;font-size:0.58rem;color:{ACCENT};background:{ACC_BG};border:1px solid {ACC_BOR};border-radius:999px;padding:0.18rem 0.7rem;letter-spacing:0.07em;">AGENTIC AI · CS 301</div>
     <div style="font-size:0.76rem;color:{TEXT3};font-style:italic;">"Know your market before your market knows you."</div>
-    <div style="margin-left:auto;font-family:Space Mono,monospace;font-size:0.58rem;color:{'"+ACCENT+"' if DEMO else '"+RED+"'};background:{'"+ACC_BG+"' if DEMO else '"+RED+"15'};border:1px solid {'"+ACC_BOR+"' if DEMO else '"+RED+"40'};border-radius:6px;padding:0.22rem 0.65rem;">● {"DEMO" if DEMO else "LIVE"} MODE</div>
+    <div style="margin-left:auto;font-family:Space Mono,monospace;font-size:0.58rem;color:{MODE_BADGE_COLOR};background:{MODE_BADGE_BG};border:1px solid {MODE_BADGE_BORDER};border-radius:6px;padding:0.22rem 0.65rem;">● {"DEMO" if DEMO else "LIVE"} MODE</div>
 </div>
 """, unsafe_allow_html=True)
 
