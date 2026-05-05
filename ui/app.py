@@ -94,11 +94,11 @@ button[data-testid="collapsedControl"] {{
 }}
 
 #MainMenu {{ visibility: hidden; }}
-header[data-testid="stHeader"] {{ display: none !important; }}
 footer {{ display: none !important; }}
 .stDeployButton {{ display: none !important; }}
-div[data-testid="stToolbar"] {{ display: none !important; }}
 .stAppDeployButton {{ display: none !important; }}
+div[data-testid="stToolbar"] {{ display: none !important; }}
+header[data-testid="stHeader"] {{ background: transparent !important; }}
 
 * {{ box-sizing: border-box; }}
 
