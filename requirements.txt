@@ -3,6 +3,3 @@ google-genai
 streamlit
 fpdf2
 python-dotenv
-streamlit
-python-dotenv
-google-genai
