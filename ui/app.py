@@ -697,8 +697,9 @@ def render_sidebar():
                 st.rerun()
 
         active_mode = st.session_state.mode
-        st.markdown(f'<div style="text-align:center;font-family:Space Mono,monospace;font-size:0.62rem;color:{ACCENT if active_mode==\'demo\' else RED};margin:-0.3rem 0 1rem 0;letter-spacing:0.1em;">{"● DEMO MODE — no key needed" if active_mode==\'demo\' else "● LIVE MODE — API key required"}</div>', unsafe_allow_html=True)
-
+        mode_text = "● DEMO MODE — no key needed" if active_mode == "demo" else "● LIVE MODE — API key required"
+        mode_color = ACCENT if active_mode == "demo" else RED
+        st.markdown(f'<div style="text-align:center;font-family:Space Mono,monospace;font-size:0.62rem;color:{mode_color};margin:-0.3rem 0 1rem 0;letter-spacing:0.1em;">{mode_text}</div>', unsafe_allow_html=True)
         # API key (only show in live mode)
         if active_mode == "live":
             st.markdown('<div class="sb-label">Gemini API Key</div>', unsafe_allow_html=True)
