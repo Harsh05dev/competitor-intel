@@ -36,11 +36,20 @@ from agents.analyst import AnalystAgent
 from agents.evaluator import EvaluatorAgent
 import config
 
-# ── Instantiate agents once (reused across nodes) ─────────────────────────────
-_researcher  = ResearcherAgent()
-_categorizer = CategorizerAgent()
-_analyst     = AnalystAgent()
-_evaluator   = EvaluatorAgent()
+# ── Lazy agent singletons (avoid import-time Gemini client / Streamlit crash) ─
+_researcher  = None
+_categorizer = None
+_analyst     = None
+_evaluator   = None
+
+
+def _get_agents():
+    global _researcher, _categorizer, _analyst, _evaluator
+    if _researcher is None:
+        _researcher = ResearcherAgent()
+        _categorizer = CategorizerAgent()
+        _analyst = AnalystAgent()
+        _evaluator = EvaluatorAgent()
 
 
 # ── NODE FUNCTIONS ─────────────────────────────────────────────────────────────
@@ -231,6 +240,7 @@ def build_graph():
     Edges:    researcher→categorizer→analyst→evaluator (fixed, always)
     Cond edge: evaluator → {retry: researcher, finalize: format_report}
     """
+    _get_agents()
     graph = StateGraph(AgentState)
 
     # ── Register nodes ─────────────────────────────────────────────────────────

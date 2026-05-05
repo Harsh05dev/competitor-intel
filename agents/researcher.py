@@ -52,7 +52,15 @@ Return ONLY the JSON array, no other text."""
 
 class ResearcherAgent:
     def __init__(self):
-        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        self.client = None  # initialized lazily on first call
+
+    def _get_client(self):
+        if self.client is None:
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            if not api_key:
+                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+            self.client = genai.Client(api_key=api_key)
+        return self.client
 
     def research(self, state: AgentState) -> Dict[str, Any]:
         company   = state.get("target_company", "")
@@ -89,7 +97,7 @@ class ResearcherAgent:
         for model in models_to_try:
             try:
                 print(f"  [Researcher] Trying {model} with Google Search Grounding...")
-                response = self.client.models.generate_content(
+                response = self._get_client().models.generate_content(
                     model=model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
@@ -105,7 +113,7 @@ class ResearcherAgent:
                 # Fallback: try without grounding if search tool fails
                 try:
                     print(f"  [Researcher] Retrying {model} without grounding...")
-                    response = self.client.models.generate_content(
+                    response = self._get_client().models.generate_content(
                         model=model,
                         contents=prompt,
                         config=types.GenerateContentConfig(

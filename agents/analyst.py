@@ -58,7 +58,15 @@ Rules:
 
 class AnalystAgent:
     def __init__(self):
-        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        self.client = None  # initialized lazily on first call
+
+    def _get_client(self):
+        if self.client is None:
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            if not api_key:
+                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+            self.client = genai.Client(api_key=api_key)
+        return self.client
 
     def analyze(self, state: AgentState) -> Dict[str, Any]:
         target      = state.get("target_company", "Unknown")
@@ -104,7 +112,7 @@ class AnalystAgent:
         for model in models_to_try:
             try:
                 print(f"  [Analyst] Trying {model}...")
-                response = self.client.models.generate_content(
+                response = self._get_client().models.generate_content(
                     model=model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
