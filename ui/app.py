@@ -82,6 +82,17 @@ st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
 
+/* Make sidebar toggle arrow always visible */
+button[data-testid="collapsedControl"] {{
+    display: flex !important;
+    background: #00d4aa18 !important;
+    border: 1px solid #00d4aa50 !important;
+    border-radius: 0 8px 8px 0 !important;
+    color: #00d4aa !important;
+    width: 1.5rem !important;
+    height: 2.5rem !important;
+}}
+
 #MainMenu {{ visibility: hidden; }}
 header[data-testid="stHeader"] {{ display: none !important; }}
 footer {{ display: none !important; }}
