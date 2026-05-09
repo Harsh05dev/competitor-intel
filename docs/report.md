@@ -205,9 +205,9 @@ The most effective aspect of the system was the Evaluator's ability to generate 
 
 | Person | Components |
 |--------|-----------|
-| Harsh | LangGraph Orchestrator (`orchestrator.py`), Evaluator agent, Streamlit dashboard, PDF export, project setup and infrastructure |
+| Harsh | LangGraph Orchestrator (`orchestrator.py`), Evaluator agent, dashboard polish, PDF export, project setup and infrastructure |
 | Rayansh | Researcher agent (web search + Google Search Grounding), Categorizer agent (merge strategy), `main.py` entry point |
-| Shippy | Analyst agent (SWOT synthesis), `docs/report.md`, demo script, dashboard polish |
+| Shippy | Analyst agent (SWOT synthesis), `docs/report.md`, demo script, Streamlit dashboard|
 
 ---
 
