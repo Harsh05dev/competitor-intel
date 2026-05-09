@@ -43,8 +43,6 @@ User Input (company + industry)
   Streamlit Dashboard (ui/app.py)
 ```
 
-![Dashboard — Stripe vs Fintech results](./screenshots/stripe-dashboard.png)
-
 ### Sample Output — Stripe vs Fintech (Round 2, Score 78/100)
 
 **SWOT Analysis:**
