@@ -52,7 +52,7 @@ class AnalysisResult(TypedDict):
 
 
 # -------------------------
-# Evaluator Output (YOUR MAIN PART)
+# Evaluator Output
 # -------------------------
 class ScoreDetail(TypedDict):
     score: int

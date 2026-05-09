@@ -383,11 +383,11 @@ with st.sidebar:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
     st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.13em;text-transform:uppercase;margin-bottom:0.5rem;">Pipeline</div>', unsafe_allow_html=True)
-    for icon, name, tag in [("🔍","Researcher","web search"),("🗂","Categorizer","structure"),("📊","Analyst","SWOT"),("✅","Evaluator","quality gate"),("🔁","Loop","score < 65"),("📄","Report","final")]:
+    for icon, name, tag in [("🔍","Researcher","web search"),("🗂","Categorizer","structure"),("📊","Analyst","SWOT"),("✅","Evaluator","quality gate"),("🔁","Loop","score < 70"),("📄","Report","final")]:
         st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:0.38rem 0.65rem;border-radius:6px;margin-bottom:0.2rem;background:{BG3};border:1px solid {BORDER};"><div style="display:flex;align-items:center;gap:0.4rem;"><span style="font-size:0.78rem;">{icon}</span><span style="font-size:0.78rem;color:{TEXT2};font-weight:500;">{name}</span></div><span style="font-family:Space Mono,monospace;font-size:0.56rem;color:{TEXT3};background:{BORDER};padding:0.1rem 0.38rem;border-radius:4px;">{tag}</span></div>', unsafe_allow_html=True)
 
     st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.13em;text-transform:uppercase;margin:0.9rem 0 0.5rem 0;">Config</div>', unsafe_allow_html=True)
-    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.67rem;color:{TEXT2};line-height:2;background:{BG3};border:1px solid {BORDER};border-radius:6px;padding:0.7rem 0.85rem;">THRESHOLD = 65<br>MAX_ITER &nbsp;= 3<br>AGENTS &nbsp;&nbsp;&nbsp;= 4<br>FRAMEWORK = LangGraph</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.67rem;color:{TEXT2};line-height:2;background:{BG3};border:1px solid {BORDER};border-radius:6px;padding:0.7rem 0.85rem;">THRESHOLD = 70<br>MAX_ITER &nbsp;= 3<br>AGENTS &nbsp;&nbsp;&nbsp;= 4<br>FRAMEWORK = LangGraph</div>', unsafe_allow_html=True)
 
     st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.13em;text-transform:uppercase;margin:0.9rem 0 0.5rem 0;">Theme</div>', unsafe_allow_html=True)
     if st.button("☀ Light" if DARK else "☾ Dark", key="theme_btn"):
