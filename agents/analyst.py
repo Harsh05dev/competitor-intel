@@ -105,6 +105,7 @@ class AnalystAgent:
         # Try models
         models_to_try = [
             config.MODEL_NAME,
+            "gemini-2.0-flash-lite",
             "gemini-2.5-flash-lite",
         ]
         response = None

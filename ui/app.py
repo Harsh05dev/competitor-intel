@@ -429,10 +429,10 @@ st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
 
 # ── Render functions ────────────────────────────────────────────────────────────
 def render_metrics(score, passed, competitors, iterations):
-    sc = "teal" if score >= 65 else "red"
+    sc = "teal" if score >= 70 else "red"
     pc = "teal" if passed else "red"
     pv = "PASS" if passed else "FAIL"
-    st.markdown(f'<div class="metrics-row"><div class="metric-cell"><div class="m-label">Quality Score</div><div class="m-value {sc}">{score}</div><div class="m-sub">/ 100 · threshold 65</div></div><div class="metric-cell"><div class="m-label">Evaluation</div><div class="m-value {pc}">{pv}</div><div class="m-sub">{"criteria met" if passed else "needs work"}</div></div><div class="metric-cell"><div class="m-label">Competitors</div><div class="m-value blue">{len(competitors)}</div><div class="m-sub">companies analyzed</div></div><div class="metric-cell"><div class="m-label">Iterations</div><div class="m-value amber">{iterations}</div><div class="m-sub">of 3 max</div></div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metrics-row"><div class="metric-cell"><div class="m-label">Quality Score</div><div class="m-value {sc}">{score}</div><div class="m-sub">/ 100 · threshold 70</div></div><div class="metric-cell"><div class="m-label">Evaluation</div><div class="m-value {pc}">{pv}</div><div class="m-sub">{"criteria met" if passed else "needs work"}</div></div><div class="metric-cell"><div class="m-label">Competitors</div><div class="m-value blue">{len(competitors)}</div><div class="m-sub">companies analyzed</div></div><div class="metric-cell"><div class="m-label">Iterations</div><div class="m-value amber">{iterations}</div><div class="m-sub">of 3 max</div></div></div>', unsafe_allow_html=True)
 
 def render_competitors(competitors):
     st.markdown('<div class="sec-head">Competitor Data</div>', unsafe_allow_html=True)
@@ -471,6 +471,50 @@ def render_gaps(gaps, queries):
         st.markdown('<div class="sec-head">Suggested Queries</div>', unsafe_allow_html=True)
         for q in (queries or []): st.markdown(f'<div class="q-row">→ {q}</div>', unsafe_allow_html=True)
         if not queries: st.markdown(f'<div style="color:{TEXT3};font-size:0.82rem;">No queries suggested.</div>', unsafe_allow_html=True)
+
+def _build_fallback_report_md(result: dict) -> str:
+    """Build a plain-markdown report from result state when final_output is absent (demo mode)."""
+    ev = result.get("evaluation", {})
+    score = ev.get("score", 0)
+    target = result.get("target_company", "Unknown")
+    industry = result.get("industry", "")
+    iters = result.get("iteration", 1)
+    conf = "HIGH" if score >= 70 else "MEDIUM" if score >= 50 else "LOW"
+
+    lines = [
+        f"# Competitor Intelligence Report: {target}",
+        f"Industry: {industry}  |  Confidence: {conf}  |  Score: {score}/100  |  Iterations: {iters}",
+        "",
+    ]
+
+    swot = (result.get("analysis") or {}).get("swot", {})
+    if swot:
+        lines.append("## SWOT Analysis")
+        for q in ["strengths", "weaknesses", "opportunities", "threats"]:
+            items = swot.get(q, [])
+            if items:
+                lines.append(f"\n### {q.title()}")
+                for item in items:
+                    lines.append(f"- {item}")
+
+    matrix = (result.get("analysis") or {}).get("comparison_matrix", [])
+    if matrix:
+        lines.append("\n## Competitor Comparison")
+        for row in matrix:
+            lines.append(
+                f"- {row.get('company_name','?')}: "
+                f"{row.get('pricing_tier','?')} | {row.get('primary_strength','?')} | "
+                f"threat={row.get('threat_level','?')}"
+            )
+
+    gaps = (result.get("analysis") or {}).get("opportunity_gaps", [])
+    if gaps:
+        lines.append("\n## Opportunity Gaps")
+        for g in gaps:
+            lines.append(f"- {g}")
+
+    return "\n".join(lines)
+
 
 def run_demo_mode(company, industry):
     slot = st.empty(); bar = st.progress(0)
@@ -531,6 +575,31 @@ if run_btn:
 
     if not ev.get("passed") and result.get("iteration",1) >= 3:
         st.warning("Max iterations reached — report generated with best available data.")
+
+    try:
+        from fpdf import FPDF
+
+        report_md = result.get("final_output", "") or _build_fallback_report_md(result)
+        if report_md:
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Helvetica", size=10)
+            for raw_line in report_md.split("\n"):
+                safe = raw_line.encode("latin-1", "replace").decode("latin-1")[:200]
+                if safe.strip():
+                    pdf.set_x(pdf.l_margin)
+                    pdf.multi_cell(pdf.epw, 5, text=safe)
+                else:
+                    pdf.ln(4)
+            pdf_bytes = bytes(pdf.output())
+            st.download_button(
+                "⬇ Download PDF Report",
+                data=pdf_bytes,
+                file_name=f"{company_final}_competitor_report.pdf",
+                mime="application/pdf",
+            )
+    except Exception:
+        pass
 else:
     st.markdown(f'<div style="margin-top:5rem;text-align:center;padding:2rem;"><div style="font-size:2.2rem;margin-bottom:1rem;opacity:0.1;">⚡</div><div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{TEXT4};letter-spacing:0.25em;text-transform:uppercase;margin-bottom:0.5rem;">System Ready</div><div style="font-family:Space Mono,monospace;font-size:0.76rem;color:{TEXT3};margin-bottom:0.35rem;">Select a company → click ▶ RUN</div><div style="font-size:0.72rem;color:{TEXT4};">{"Demo mode active — no API key needed" if DEMO else "Live mode — paste your Gemini key in the sidebar"}</div></div>', unsafe_allow_html=True)
 

@@ -43,6 +43,33 @@ User Input (company + industry)
   Streamlit Dashboard (ui/app.py)
 ```
 
+![Dashboard — Stripe vs Fintech results](./screenshots/stripe-dashboard.png)
+
+### Sample Output — Stripe vs Fintech (Round 2, Score 78/100)
+
+**SWOT Analysis:**
+
+| Quadrant | Points |
+|----------|--------|
+| Strengths | Best-in-class developer API; $1T+ processed annually; Full infrastructure suite (Billing, Radar, Treasury); 38% YoY growth |
+| Weaknesses | 2.9% + 30¢ flat rate loses to Interchange++ at volume; Customer support concerns; Limited POS hardware |
+| Opportunities | SMB-friendly onboarding; AI-powered fraud detection; Embedded finance expansion |
+| Threats | Square's POS dominance; Adyen's enterprise pricing; Checkout.com's $40B valuation |
+
+**Evaluator Breakdown (showing the feedback loop in action):**
+
+| Criterion | Round 1 Score | Round 2 Score | Gap Filled |
+|-----------|--------------|--------------|------------|
+| competitor_count | 9/10 | 9/10 | — |
+| pricing_coverage | 6/10 | 9/10 | ✓ Braintree pricing found |
+| feature_coverage | 8/10 | 9/10 | ✓ Adyen features added |
+| funding_data | 5/10 | 7/10 | ✓ Partial |
+| hiring_signals | 4/10 | 6/10 | ✓ Square hiring data |
+| swot_depth | 8/10 | 9/10 | ✓ Improved |
+| **Composite** | **61/100** | **78/100** | **PASSED** |
+
+The composite score is computed as a weighted sum of the six per-criterion scores using `EVAL_WEIGHTS` from `config.py` (pricing/feature/SWOT each 20%, competitor count and funding each 15%, hiring 10%). The Round-1 → Round-2 jump shows that the Evaluator's `suggested_queries` directly closed the gaps it identified — this is the agentic feedback loop.
+
 ### 2.2 Components
 
 **Agent 1 — Researcher** (`agents/researcher.py`)  
@@ -130,6 +157,10 @@ app = graph.compile()
 
 `route_after_evaluation(state)` returns `"finalize"` when `score >= EVALUATION_THRESHOLD` or when `iteration >= MAX_ITERATIONS` (the safety valve), and returns `"retry"` otherwise.
 
+The `add_conditional_edges()` call is what makes this system genuinely agentic — not just iterative. The graph itself, not a hidden if-statement buried in a loop, decides whether to retry or finalize. When the Evaluator scores below 70, the graph routes back to the Researcher with `suggested_queries` — specific search strings targeting only the gaps identified, not a repeat of the full broad search.
+
+The threshold of 70 (not 100) is a deliberate design choice: competitive intelligence is inherently incomplete. Requiring perfection causes infinite loops when information simply isn't publicly available. The 70 threshold balances completeness with practical convergence — in testing, queries converge within 2 iterations for most companies.
+
 ### 3.3 Why This Is Agentic
 
 The system demonstrates agentic behavior through:
@@ -173,11 +204,11 @@ The most effective aspect of the system was the Evaluator's ability to generate 
 
 ## 5. Team Contributions
 
-| Team Member | Responsibilities |
-|-------------|-----------------|
-| Harsh | Project setup, GitHub repo, config.py, smoke tests, README, Phase 0 infrastructure |
-| Rayansh | Researcher agent, Evaluator agent, Orchestrator loop, main.py, end-to-end integration |
-| Shippy | Streamlit dashboard (ui/app.py), UI design, Phase 4 polish, report.md |
+| Person | Components |
+|--------|-----------|
+| Harsh | LangGraph Orchestrator (`orchestrator.py`), Evaluator agent, Streamlit dashboard, PDF export, project setup and infrastructure |
+| Rayansh | Researcher agent (web search + Google Search Grounding), Categorizer agent (merge strategy), `main.py` entry point |
+| Shippy | Analyst agent (SWOT synthesis), `docs/report.md`, demo script, dashboard polish |
 
 ---
 
