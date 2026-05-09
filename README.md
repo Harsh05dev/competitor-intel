@@ -2,6 +2,8 @@
 
 A multi-agent system that performs automated competitor research and produces a quality-controlled intelligence report. Built for **CS 301 — Agentic AI**.
 
+🔗 **Live demo:** [competitor-intel-kard998mv6uejrcu5dz88w.streamlit.app](https://competitor-intel-kard998mv6uejrcu5dz88w.streamlit.app/) — runs in DEMO mode out of the box (no API key needed). Toggle to LIVE mode in the sidebar and paste a Gemini key to run real analyses.
+
 Given a target company and its industry, the system uses a **LangGraph** state machine of four specialized agents to find competitors, structure their data, generate strategic analysis (SWOT, comparison matrix, threat ranking), and **score its own output**. If the score falls below the threshold, the graph loops back through the Researcher with targeted gap-filling queries — a real iterative feedback loop, not a fixed pipeline.
 
 ## Team
@@ -135,7 +137,15 @@ GEMINI_MODEL=gemini-2.5-flash-lite
 
 ## Running the System
 
-### Streamlit dashboard (recommended)
+### Hosted (no setup)
+
+The dashboard is deployed on Streamlit Community Cloud:
+
+**[competitor-intel-kard998mv6uejrcu5dz88w.streamlit.app](https://competitor-intel-kard998mv6uejrcu5dz88w.streamlit.app/)**
+
+Opens in DEMO mode by default — pre-computed Stripe vs fintech results, no API key required. Toggle to LIVE mode in the sidebar and paste a Gemini key to analyze a custom company end-to-end.
+
+### Streamlit dashboard (local)
 
 ```bash
 streamlit run ui/app.py

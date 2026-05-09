@@ -2,7 +2,8 @@
 
 **Course:** CS 301 — Agentic AI  
 **Team:** Harsh, Rayansh, Shippy  
-**Repository:** https://github.com/Harsh05dev/competitor-intel
+**Repository:** https://github.com/Harsh05dev/competitor-intel  
+**Live demo:** https://competitor-intel-kard998mv6uejrcu5dz88w.streamlit.app/
 
 ---
 
