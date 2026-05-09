@@ -58,7 +58,7 @@ A 4-agent system orchestrated by a LangGraph StateGraph with a conditional feedb
 - **Iterative refinement** — Evaluator agent scores output and sends targeted gaps back for re-research
 - **Typed data contracts** — agents communicate through structured schemas
 
-**What makes it agentic (not just a pipeline):** The Evaluator is an independent quality gate. When it scores the output below 75/100, the graph routes back to the Researcher with specific gap-filling queries. The system loops until quality passes or max retries (3) are exhausted.
+**What makes it agentic (not just a pipeline):** The Evaluator is an independent quality gate. When it scores the output below 70/100, the graph routes back to the Researcher with specific gap-filling queries. The system loops until quality passes or max retries (3) are exhausted.
 
 ---
 
@@ -95,7 +95,7 @@ These are the key decisions made during planning, with rationale for each. This 
 - Gather and structure data per competitor: pricing, features, funding, hiring signals, news, sentiment
 - Generate SWOT analysis and competitor comparison matrix
 - Score report quality (0-100) on 7 weighted criteria
-- Automatically re-research specific gaps when score < 75
+- Automatically re-research specific gaps when score < 70
 - Cap iterations at 3 with graceful degradation
 - Track iteration count and score progression
 
@@ -170,7 +170,7 @@ These are the key decisions made during planning, with rationale for each. This 
 │         │        EDGE                  │ (node 4)  │           │
 │         │                              └─────┬─────┘           │
 │         │                                    │                 │
-│         │         score < 75                 │  score >= 75    │
+│         │         score < 70                 │  score >= 70    │
 │         └──── AND iter < 3 ─────────────────┤                 │
 │                                              │                 │
 │                                              ▼                 │
@@ -442,7 +442,7 @@ graph.add_conditional_edges(
     "evaluator",
     route_after_evaluation,   # function that checks score + iteration
     {
-        "retry": "researcher",       # loop back if score < 75 and iter < 3
+        "retry": "researcher",       # loop back if score < 70 and iter < 3
         "finalize": "format_report", # proceed if passed or max iterations
     }
 )
@@ -460,7 +460,7 @@ def route_after_evaluation(state: AgentState) -> str:
     score = state["evaluation"].get("score", 0)
     iteration = state["iteration"]
 
-    if score >= 75:
+    if score >= 70:
         return "finalize"    # quality passed
     elif iteration >= 3:
         return "finalize"    # max retries, proceed with warning
@@ -661,7 +661,7 @@ You do NOT need to learn:
 | Day 9 | Build Researcher agent: Gemini + Google Search Grounding, test with "Stripe" | Researcher returns structured JSON with 4+ competitors |
 | Day 10 | Build Categorizer agent: test with Researcher's real output | Categorizer takes raw snippets, returns clean structured JSON |
 | Day 11 | Build Analyst agent: test with Categorizer's real output | Analyst produces SWOT with 2+ points per quadrant |
-| Day 12 | Build Evaluator agent: test with intentionally incomplete data | Evaluator scores < 75 on bad data, identifies correct gaps, generates search queries |
+| Day 12 | Build Evaluator agent: test with intentionally incomplete data | Evaluator scores < 70 on bad data, identifies correct gaps, generates search queries |
 | Day 13 | Build LangGraph Orchestrator: wire all 4 agents as nodes, add conditional edge | End-to-end run: company name → full analysis with feedback loop |
 | Day 14 | Integration testing: run 3 different companies, fix bugs, handle edge cases | System works reliably for "Stripe", "Notion", and "Figma" |
 
@@ -739,7 +739,7 @@ See the separate **TASK_CHECKLIST.md** for the full assignable checklist with ch
 
 > "We chose not to create a separate Reporter agent because report formatting is a presentation concern, not a reasoning task. Our Orchestrator handles the final output template, keeping agent count focused on agents that actually reason."
 
-> "We set the evaluation threshold at 75 rather than 100 because competitive intelligence is inherently incomplete. Requiring perfection would cause infinite loops. The 75 threshold balances completeness with practical convergence — in our testing, most queries converge within 2 iterations."
+> "We set the evaluation threshold at 70 rather than 100 because competitive intelligence is inherently incomplete. Requiring perfection would cause infinite loops. The 70 threshold balances completeness with practical convergence — in our testing, most queries converge within 2 iterations."
 
 > "The Evaluator is independent from the Analyst for the same reason a code reviewer shouldn't review their own code. If the same agent writes and grades the SWOT, the feedback loop has no credibility."
 
