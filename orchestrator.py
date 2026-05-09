@@ -278,7 +278,7 @@ def build_graph():
 
 # ── PUBLIC API ─────────────────────────────────────────────────────────────────
 
-def run_analysis(company: str, industry: str) -> AgentState:
+def run_analysis(company: str, industry: str, api_key: str | None = None) -> AgentState:
     """
     Main entry point. Takes company + industry, returns the complete final state.
     Called by main.py Orchestrator wrapper and by ui/app.py indirectly.
@@ -288,6 +288,7 @@ def run_analysis(company: str, industry: str) -> AgentState:
     initial_state: AgentState = {
         "target_company":          company,
         "industry":                industry,
+        "gemini_api_key":          api_key,
         "iteration":               0,
         "research_results":        [],
         "categorized_competitors": [],
