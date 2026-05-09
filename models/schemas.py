@@ -82,6 +82,7 @@ class EvaluationResult(TypedDict):
 class AgentState(TypedDict):
     target_company: str
     industry: str
+    gemini_api_key: Optional[str]
     iteration: int
 
     research_results: List[ResearchResult]

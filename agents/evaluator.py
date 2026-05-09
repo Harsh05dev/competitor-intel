@@ -68,18 +68,22 @@ class EvaluatorAgent:
     def __init__(self):
         self.client = None  # initialized lazily on first call
 
-    def _get_client(self):
+    def _get_client(self, api_key=None):
+        if api_key:
+            # User-supplied keys are per run/session; never cache them on shared agents.
+            return genai.Client(api_key=api_key)
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if not api_key:
+            env_api_key = os.getenv("GEMINI_API_KEY", "")
+            if not env_api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
-            self.client = genai.Client(api_key=api_key)
+            self.client = genai.Client(api_key=env_api_key)
         return self.client
 
     def evaluate(self, state: AgentState) -> Dict[str, Any]:
         target      = state.get("target_company", "Unknown")
         competitors = state.get("categorized_competitors", [])
         analysis    = state.get("analysis", {})
+        api_key     = state.get("gemini_api_key")
 
         print(f"  [Evaluator] Scoring intelligence report for {target}")
 
@@ -121,7 +125,7 @@ class EvaluatorAgent:
         for model in models_to_try:
             try:
                 print(f"  [Evaluator] Trying {model}...")
-                response = self._get_client().models.generate_content(
+                response = self._get_client(api_key).models.generate_content(
                     model=model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
