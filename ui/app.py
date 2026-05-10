@@ -348,6 +348,13 @@ li[role="option"]:hover, li[aria-selected="true"] {{
 .stTabs [data-baseweb="tab"]:hover {{ color: {TEXT2} !important; background: {ACCENT}0a !important; }}
 .stTabs [aria-selected="true"] {{ color: {ACCENT} !important; border-bottom: 2px solid {ACCENT} !important; text-shadow: 0 0 12px {ACCENT}55 !important; }}
 
+/* Sidebar pipeline item hover — subtle accent lift */
+.pipe-item:hover {{
+    border-color: {ACCENT}80 !important;
+    transform: translateX(2px);
+    box-shadow: -3px 0 0 0 {ACCENT}, 0 4px 12px -4px {ACCENT}40 !important;
+}}
+
 ::-webkit-scrollbar {{ width: 6px; height: 6px; }}
 ::-webkit-scrollbar-track {{ background: {BG}; }}
 ::-webkit-scrollbar-thumb {{ background: {BORDER}; border-radius: 3px; }}
@@ -413,14 +420,20 @@ COMPANY_MAP = {
 }
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
+SIDE_LABEL = f"font-family:'Space Mono',monospace;font-size:0.66rem;font-weight:700;color:{ACCENT};letter-spacing:0.2em;text-transform:uppercase;margin-bottom:0.55rem;display:flex;align-items:center;gap:0.45rem;"
+SIDE_LABEL_ICON = f"display:inline-block;width:5px;height:5px;border-radius:50%;background:{ACCENT};box-shadow:0 0 8px {ACCENT}cc;"
+
 with st.sidebar:
-    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{ACCENT};letter-spacing:0.22em;text-transform:uppercase;padding-bottom:1.1rem;border-bottom:1px solid {BORDER};margin-bottom:1.3rem;">⚡ Competitor Intel</div>', unsafe_allow_html=True)
     st.markdown(
-        f'<p style="font-size:0.6rem;color:{TEXT4};margin:-0.6rem 0 1rem 0;line-height:1.4;">Opens automatically on each visit. If you collapse the sidebar, use the <span style="color:{ACCENT};font-weight:600;">teal «</span> tab on the left — it stays fixed and fully visible.</p>',
+        f'<div style="font-family:\'Space Mono\',monospace;font-size:0.82rem;font-weight:700;background:linear-gradient(90deg,{ACCENT},{BLUE});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:0.18em;text-transform:uppercase;padding-bottom:1rem;border-bottom:1px solid {BORDER};margin-bottom:1.2rem;">⚡ Competitor Intel</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<p style="font-size:0.66rem;color:{TEXT3};margin:-0.4rem 0 1.1rem 0;line-height:1.55;font-weight:450;">Opens automatically on each visit. If you collapse the sidebar, use the <span style="color:{ACCENT};font-weight:700;">teal «</span> tab on the left — it stays fixed and fully visible.</p>',
         unsafe_allow_html=True,
     )
 
-    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem;">Mode</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="{SIDE_LABEL}"><span style="{SIDE_LABEL_ICON}"></span>Mode</div>', unsafe_allow_html=True)
     mc1, mc2 = st.columns(2)
     with mc1:
         if st.button("⚡ DEMO", key="btn_demo"):
@@ -431,27 +444,47 @@ with st.sidebar:
 
     mc = ACCENT if DEMO else RED
     mt = "● DEMO — no key needed" if DEMO else "● LIVE — key required"
-    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.58rem;color:{mc};text-align:center;margin:0.3rem 0 1rem 0;">{mt}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{mc};text-align:center;margin:0.5rem 0 1.2rem 0;padding:0.35rem;background:{mc}14;border:1px solid {mc}40;border-radius:6px;letter-spacing:0.08em;">{mt}</div>',
+        unsafe_allow_html=True,
+    )
 
     if not DEMO:
-        st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.13em;text-transform:uppercase;margin-bottom:0.4rem;">Gemini API Key</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="{SIDE_LABEL}"><span style="{SIDE_LABEL_ICON}"></span>Gemini API Key</div>', unsafe_allow_html=True)
         api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed")
         if api_key:
             os.environ["GEMINI_API_KEY"] = api_key
-            st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.58rem;color:{ACCENT};margin-top:0.2rem;">✓ key loaded</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{ACCENT};margin-top:0.35rem;">✓ key loaded</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.58rem;color:{AMBER};margin-top:0.2rem;">⚠ paste key to run</div>', unsafe_allow_html=True)
-        st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.56rem;color:{TEXT3};margin-top:0.2rem;">free key → ai.google.dev</div>', unsafe_allow_html=True)
-        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+            st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{AMBER};margin-top:0.35rem;">⚠ paste key to run</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.6rem;color:{TEXT3};margin-top:0.35rem;font-weight:500;">free key → <span style="color:{ACCENT};">ai.google.dev</span></div>', unsafe_allow_html=True)
+        st.markdown("<div style='height:0.7rem'></div>", unsafe_allow_html=True)
 
-    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.13em;text-transform:uppercase;margin-bottom:0.5rem;">Pipeline</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="{SIDE_LABEL}"><span style="{SIDE_LABEL_ICON}"></span>Pipeline</div>', unsafe_allow_html=True)
     for icon, name, tag in [("🔍","Researcher","web search"),("🗂","Categorizer","structure"),("📊","Analyst","SWOT"),("✅","Evaluator","quality gate"),("🔁","Loop","score < 70"),("📄","Report","final")]:
-        st.markdown(f'<div style="display:flex;align-items:center;justify-content:space-between;padding:0.38rem 0.65rem;border-radius:6px;margin-bottom:0.2rem;background:{BG3};border:1px solid {BORDER};"><div style="display:flex;align-items:center;gap:0.4rem;"><span style="font-size:0.78rem;">{icon}</span><span style="font-size:0.78rem;color:{TEXT2};font-weight:500;">{name}</span></div><span style="font-family:Space Mono,monospace;font-size:0.56rem;color:{TEXT3};background:{BORDER};padding:0.1rem 0.38rem;border-radius:4px;">{tag}</span></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="pipe-item" style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.75rem;border-radius:8px;margin-bottom:0.3rem;background:linear-gradient(135deg,{BG3} 0%,{BG2} 100%);border:1px solid {BORDER};transition:all 0.18s ease;">'
+            f'<div style="display:flex;align-items:center;gap:0.55rem;">'
+            f'<span style="font-size:0.95rem;filter:drop-shadow(0 0 6px {ACCENT}40);">{icon}</span>'
+            f'<span style="font-size:0.82rem;color:{TEXT};font-weight:600;letter-spacing:0.01em;">{name}</span>'
+            f'</div>'
+            f'<span style="font-family:\'Space Mono\',monospace;font-size:0.58rem;font-weight:700;color:{ACCENT};background:{ACCENT}1f;border:1px solid {ACCENT}40;padding:0.15rem 0.45rem;border-radius:5px;letter-spacing:0.05em;">{tag}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
-    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.13em;text-transform:uppercase;margin:0.9rem 0 0.5rem 0;">Config</div>', unsafe_allow_html=True)
-    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.67rem;color:{TEXT2};line-height:2;background:{BG3};border:1px solid {BORDER};border-radius:6px;padding:0.7rem 0.85rem;">THRESHOLD = 70<br>MAX_ITER &nbsp;= 3<br>AGENTS &nbsp;&nbsp;&nbsp;= 4<br>FRAMEWORK = LangGraph</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="{SIDE_LABEL}margin-top:1.1rem;"><span style="{SIDE_LABEL_ICON}"></span>Config</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-family:\'Space Mono\',monospace;font-size:0.7rem;line-height:1.95;background:linear-gradient(135deg,{BG3} 0%,{BG2} 100%);border:1px solid {BORDER};border-radius:8px;padding:0.8rem 0.95rem;font-weight:500;">'
+        f'<div><span style="color:{TEXT3};">THRESHOLD</span> <span style="color:{TEXT4};">=</span> <span style="color:{ACCENT};font-weight:700;">70</span></div>'
+        f'<div><span style="color:{TEXT3};">MAX_ITER</span>&nbsp; <span style="color:{TEXT4};">=</span> <span style="color:{AMBER};font-weight:700;">3</span></div>'
+        f'<div><span style="color:{TEXT3};">AGENTS</span>&nbsp;&nbsp;&nbsp; <span style="color:{TEXT4};">=</span> <span style="color:{BLUE};font-weight:700;">4</span></div>'
+        f'<div><span style="color:{TEXT3};">FRAMEWORK</span> <span style="color:{TEXT4};">=</span> <span style="color:{TEXT};font-weight:700;">LangGraph</span></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
-    st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.13em;text-transform:uppercase;margin:0.9rem 0 0.5rem 0;">Theme</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="{SIDE_LABEL}margin-top:1.1rem;"><span style="{SIDE_LABEL_ICON}"></span>Theme</div>', unsafe_allow_html=True)
     if st.button("☀ Light" if DARK else "☾ Dark", key="theme_btn"):
         st.session_state.theme = "light" if DARK else "dark"; st.rerun()
 
