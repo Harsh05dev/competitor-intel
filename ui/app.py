@@ -51,20 +51,20 @@ DARK = st.session_state.theme == "dark"
 DEMO = st.session_state.mode  == "demo"
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
-# Palette tuned for SaaS dashboard polish (Linear / Vercel / Resend reference).
-# Dark = blue-tinted slate, not pure black void. Text ≥ WCAG AA on both themes.
+# Palette: Linear / Resend / Vercel inspired. Deep midnight w/ teal-mint accent.
+# Distinct surface elevation BG → BG2 → BG3 so cards visually pop.
 if DARK:
-    BG, BG2, BG3     = "#0a0a14", "#12121f", "#1a1a2e"
-    BORDER           = "#2a2a45"
-    TEXT, TEXT2, TEXT3, TEXT4 = "#e8e8f0", "#c8c8e8", "#6868a0", "#4a4a70"
+    BG, BG2, BG3     = "#07080d", "#11131f", "#1c1f33"
+    BORDER           = "#2d3148"
+    TEXT, TEXT2, TEXT3, TEXT4 = "#f5f7fb", "#c5c9dd", "#7a82a8", "#4a516e"
     ACCENT           = "#00d4aa"
-    RED, BLUE, AMBER = "#ff7a7a", "#7aa8ff", "#fbbf24"
+    RED, BLUE, AMBER = "#f87171", "#818cf8", "#fbbf24"
 else:
-    BG, BG2, BG3     = "#f5f5fa", "#ffffff", "#f9fafb"
-    BORDER           = "#e0e0ee"
-    TEXT, TEXT2, TEXT3, TEXT4 = "#0d0d1a", "#374151", "#6b7280", "#9ca3af"
-    ACCENT           = "#007a64"
-    RED, BLUE, AMBER = "#dc2626", "#1d4ed8", "#b45309"
+    BG, BG2, BG3     = "#fafbfc", "#ffffff", "#f3f4f8"
+    BORDER           = "#e1e4ed"
+    TEXT, TEXT2, TEXT3, TEXT4 = "#0a0c14", "#2d3344", "#6b7390", "#a0a6bf"
+    ACCENT           = "#008566"
+    RED, BLUE, AMBER = "#dc2626", "#4f46e5", "#b45309"
 
 ACC_BG  = f"{ACCENT}18"
 ACC_BOR = f"{ACCENT}55"
@@ -132,16 +132,25 @@ html, body, [class*="css"] {{
     background: {BG};
     color: {TEXT};
 }}
-.stApp {{ background: {BG}; }}
+/* App canvas: subtle ambient glow at top so the void breathes */
+.stApp {{
+    background:
+        radial-gradient(ellipse 1100px 520px at 50% -120px, {ACCENT}14, transparent 70%),
+        radial-gradient(ellipse 800px 400px at 12% 18%, {BLUE}10, transparent 60%),
+        {BG} !important;
+    background-attachment: fixed !important;
+}}
 .block-container {{
     padding: 1.5rem 2rem 3rem 2rem !important;
     max-width: 1200px !important;
 }}
 
-/* Sidebar — proper panel surface, not a darker void */
+/* Sidebar — elevated panel with vertical gradient, hairline accent edge */
 section[data-testid="stSidebar"] {{
-    background: {BG2} !important;
+    background:
+        linear-gradient(180deg, {BG2} 0%, {BG} 100%) !important;
     border-right: 1px solid {BORDER} !important;
+    box-shadow: 1px 0 0 0 {ACCENT}14 inset !important;
 }}
 section[data-testid="stSidebar"] > div {{
     padding: 1.5rem 1.1rem !important;
@@ -151,20 +160,23 @@ section[data-testid="stSidebar"] > div {{
     background: {BG3} !important;
     color: {TEXT} !important;
     border: 1px solid {BORDER} !important;
-    border-radius: 7px !important;
+    border-radius: 8px !important;
     font-family: 'Space Mono', monospace !important;
     font-size: 0.68rem !important;
     font-weight: 700 !important;
     letter-spacing: 0.07em !important;
-    padding: 0.5rem !important;
+    padding: 0.55rem !important;
     width: 100% !important;
-    transition: all 0.15s ease !important;
+    transition: all 0.18s ease !important;
 }}
 .stButton > button:hover {{
-    background: {ACCENT}14 !important;
+    background: {ACCENT}1f !important;
     border-color: {ACCENT} !important;
     color: {ACCENT} !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px {ACCENT}26;
 }}
+.stButton > button:active {{ transform: translateY(0); }}
 
 .stTextInput label, .stSelectbox label {{
     font-family: 'Space Mono', monospace !important;
@@ -226,72 +238,105 @@ li[role="option"]:hover, li[aria-selected="true"] {{
     color: {ACCENT} !important;
 }}
 
+/* Run button — primary CTA, accent gradient + glow */
 .run-btn > div > button {{
-    background: {ACCENT}22 !important;
+    background: linear-gradient(135deg, {ACCENT}33 0%, {ACCENT}1a 100%) !important;
     color: {ACCENT} !important;
-    border: 1px solid {ACCENT}60 !important;
-    border-radius: 8px !important;
+    border: 1px solid {ACCENT}80 !important;
+    border-radius: 9px !important;
     font-family: 'Space Mono', monospace !important;
     font-size: 0.8rem !important;
     font-weight: 700 !important;
     letter-spacing: 0.1em !important;
+    box-shadow: 0 4px 16px {ACCENT}26, 0 1px 0 {ACCENT}33 inset !important;
 }}
 .run-btn > div > button:hover {{
-    background: {ACCENT}35 !important;
+    background: linear-gradient(135deg, {ACCENT}4d 0%, {ACCENT}26 100%) !important;
     border-color: {ACCENT} !important;
+    box-shadow: 0 8px 24px {ACCENT}40, 0 1px 0 {ACCENT}40 inset !important;
+    transform: translateY(-1px);
 }}
 
-/* Metric cards — clear surface, full-contrast value */
+/* Metric cards — elevated surface w/ tinted shadow + glowing values */
 .metrics-row {{
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 1px;
     background: {BORDER};
-    border-radius: 12px;
+    border-radius: 14px;
     overflow: hidden;
     border: 1px solid {BORDER};
     margin: 1.5rem 0;
-    box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset;
+    box-shadow:
+        0 1px 0 rgba(255,255,255,0.03) inset,
+        0 12px 40px -16px rgba(0,0,0,0.5);
 }}
-.metric-cell {{ background: {BG2}; padding: 1.3rem 1.5rem; }}
-.m-label {{ font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700; color: {TEXT3}; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.5rem; }}
-.m-value {{ font-family: 'Space Mono', monospace; font-size: 1.95rem; font-weight: 700; line-height: 1; color: {TEXT}; letter-spacing: -0.01em; }}
-.m-value.teal  {{ color: {ACCENT}; }}
-.m-value.red   {{ color: {RED}; }}
-.m-value.blue  {{ color: {BLUE}; }}
-.m-value.amber {{ color: {AMBER}; }}
-.m-sub {{ font-size: 0.67rem; color: {TEXT3}; margin-top: 0.35rem; font-family: 'Space Mono', monospace; font-weight: 400; }}
+.metric-cell {{
+    background: linear-gradient(180deg, {BG2} 0%, {BG3} 100%);
+    padding: 1.4rem 1.6rem;
+    position: relative;
+}}
+.metric-cell::before {{
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, {ACCENT}33, transparent);
+}}
+.m-label {{ font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700; color: {TEXT3}; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 0.55rem; }}
+.m-value {{ font-family: 'Space Mono', monospace; font-size: 2.1rem; font-weight: 700; line-height: 1; color: {TEXT}; letter-spacing: -0.02em; }}
+.m-value.teal  {{ color: {ACCENT}; text-shadow: 0 0 20px {ACCENT}66; }}
+.m-value.red   {{ color: {RED}; text-shadow: 0 0 20px {RED}55; }}
+.m-value.blue  {{ color: {BLUE}; text-shadow: 0 0 20px {BLUE}55; }}
+.m-value.amber {{ color: {AMBER}; text-shadow: 0 0 20px {AMBER}55; }}
+.m-sub {{ font-size: 0.67rem; color: {TEXT3}; margin-top: 0.4rem; font-family: 'Space Mono', monospace; font-weight: 400; }}
 
 .sec-head {{
     font-family: 'Space Mono', monospace;
-    font-size: 0.6rem;
+    font-size: 0.62rem;
     font-weight: 700;
-    color: {TEXT3};
-    letter-spacing: 0.2em;
+    color: {ACCENT};
+    letter-spacing: 0.22em;
     text-transform: uppercase;
-    margin: 1.5rem 0 0.8rem 0;
+    margin: 1.8rem 0 0.9rem 0;
     display: flex;
     align-items: center;
-    gap: 0.8rem;
+    gap: 0.85rem;
 }}
-.sec-head::after {{ content: ''; flex: 1; height: 1px; background: {BORDER}; }}
+.sec-head::before {{ content: '◆'; font-size: 0.5rem; opacity: 0.7; }}
+.sec-head::after {{ content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, {BORDER}, transparent); }}
 
+/* Competitor cards — raised w/ subtle gradient + accent glow on hover */
 .comp-card {{
-    background: {BG2};
+    background: linear-gradient(180deg, {BG2} 0%, {BG2} 100%);
     border: 1px solid {BORDER};
-    border-radius: 10px;
-    padding: 1.1rem 1.4rem;
-    margin-bottom: 0.5rem;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    border-radius: 12px;
+    padding: 1.15rem 1.45rem;
+    margin-bottom: 0.55rem;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
 }}
-.comp-card:hover {{ border-color: {ACCENT}55; background: {BG3}; }}
-.comp-name {{ font-size: 0.95rem; font-weight: 600; color: {TEXT}; margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.5rem; letter-spacing: -0.005em; }}
-.c-dot {{ width: 5px; height: 5px; border-radius: 50%; background: {ACCENT}; flex-shrink: 0; box-shadow: 0 0 8px {ACCENT}80; }}
-.snippet {{ font-size: 0.82rem; font-weight: 450; color: {TEXT2}; padding: 0.22rem 0 0.22rem 0.75rem; border-left: 1px solid {BORDER}; margin-bottom: 0.22rem; line-height: 1.55; }}
-.src {{ font-family: 'Space Mono', monospace; font-size: 0.6rem; color: {ACCENT}; opacity: 0.55; margin-top: 0.4rem; }}
+.comp-card::before {{
+    content: '';
+    position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+    background: linear-gradient(180deg, {ACCENT}, {ACCENT}00);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}}
+.comp-card:hover {{
+    border-color: {ACCENT}66;
+    background: linear-gradient(180deg, {BG3} 0%, {BG2} 100%);
+    box-shadow: 0 8px 24px -8px {ACCENT}33, 0 0 0 1px {ACCENT}1a;
+    transform: translateY(-1px);
+}}
+.comp-card:hover::before {{ opacity: 1; }}
+.comp-name {{ font-size: 0.97rem; font-weight: 600; color: {TEXT}; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.55rem; letter-spacing: -0.01em; }}
+.c-dot {{ width: 6px; height: 6px; border-radius: 50%; background: {ACCENT}; flex-shrink: 0; box-shadow: 0 0 12px {ACCENT}cc, 0 0 0 3px {ACCENT}1a; }}
+.snippet {{ font-size: 0.82rem; font-weight: 450; color: {TEXT2}; padding: 0.25rem 0 0.25rem 0.85rem; border-left: 1px solid {BORDER}; margin-bottom: 0.25rem; line-height: 1.55; transition: border-color 0.15s ease; }}
+.snippet:hover {{ border-left-color: {ACCENT}; }}
+.src {{ font-family: 'Space Mono', monospace; font-size: 0.6rem; color: {ACCENT}; opacity: 0.6; margin-top: 0.45rem; letter-spacing: 0.05em; }}
 
-.gap-row {{ padding: 0.65rem 0.9rem; background: {RED}14; border: 1px solid {RED}33; border-left: 2px solid {RED}; border-radius: 0 7px 7px 0; margin-bottom: 0.3rem; font-size: 0.82rem; font-weight: 500; color: {RED}; line-height: 1.45; }}
-.q-row {{ padding: 0.65rem 0.9rem; background: {ACC_BG}; border: 1px solid {ACC_BOR}; border-left: 2px solid {ACCENT}; border-radius: 0 7px 7px 0; margin-bottom: 0.3rem; font-size: 0.82rem; font-weight: 500; color: {ACCENT}; font-family: 'Space Mono', monospace; line-height: 1.45; }}
+.gap-row {{ padding: 0.7rem 1rem; background: linear-gradient(135deg, {RED}1f, {RED}0a); border: 1px solid {RED}40; border-left: 3px solid {RED}; border-radius: 0 8px 8px 0; margin-bottom: 0.35rem; font-size: 0.83rem; font-weight: 500; color: {RED}; line-height: 1.5; box-shadow: 0 2px 8px -4px {RED}33; }}
+.q-row {{ padding: 0.7rem 1rem; background: linear-gradient(135deg, {ACCENT}26, {ACCENT}0a); border: 1px solid {ACCENT}55; border-left: 3px solid {ACCENT}; border-radius: 0 8px 8px 0; margin-bottom: 0.35rem; font-size: 0.83rem; font-weight: 500; color: {ACCENT}; font-family: 'Space Mono', monospace; line-height: 1.5; box-shadow: 0 2px 8px -4px {ACCENT}33; }}
 
 .prog-row {{ display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0; font-size: 0.82rem; color: {TEXT2}; font-family: 'Space Mono', monospace; }}
 .prog-dot {{ width: 5px; height: 5px; border-radius: 50%; background: {ACCENT}; flex-shrink: 0; animation: blink 1s infinite; box-shadow: 0 0 8px {ACCENT}80; }}
@@ -299,9 +344,9 @@ li[role="option"]:hover, li[aria-selected="true"] {{
 .stProgress > div > div {{ background: {ACCENT} !important; }}
 
 .stTabs [data-baseweb="tab-list"] {{ background: transparent !important; border-bottom: 1px solid {BORDER} !important; gap: 0 !important; padding: 0 !important; }}
-.stTabs [data-baseweb="tab"] {{ font-family: 'Space Mono', monospace !important; font-size: 0.67rem !important; font-weight: 700 !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; color: {TEXT3} !important; padding: 0.7rem 1.2rem !important; border-radius: 0 !important; border-bottom: 2px solid transparent !important; background: transparent !important; transition: color 0.15s ease, border-color 0.15s ease !important; }}
-.stTabs [data-baseweb="tab"]:hover {{ color: {TEXT2} !important; }}
-.stTabs [aria-selected="true"] {{ color: {ACCENT} !important; border-bottom: 2px solid {ACCENT} !important; }}
+.stTabs [data-baseweb="tab"] {{ font-family: 'Space Mono', monospace !important; font-size: 0.68rem !important; font-weight: 700 !important; letter-spacing: 0.12em !important; text-transform: uppercase !important; color: {TEXT3} !important; padding: 0.8rem 1.3rem !important; border-radius: 0 !important; border-bottom: 2px solid transparent !important; background: transparent !important; transition: all 0.18s ease !important; }}
+.stTabs [data-baseweb="tab"]:hover {{ color: {TEXT2} !important; background: {ACCENT}0a !important; }}
+.stTabs [aria-selected="true"] {{ color: {ACCENT} !important; border-bottom: 2px solid {ACCENT} !important; text-shadow: 0 0 12px {ACCENT}55 !important; }}
 
 ::-webkit-scrollbar {{ width: 6px; height: 6px; }}
 ::-webkit-scrollbar-track {{ background: {BG}; }}
