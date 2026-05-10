@@ -93,7 +93,6 @@ competitor-intel/
 ├── docs/
 │   ├── PROJECT_SPEC_V2.md  # design spec
 │   ├── TASK_CHECKLIST.md   # execution plan
-│   ├── DEMO_SCRIPT.md      # demo walkthrough
 │   └── report.md           # final written report
 ├── orchestrator.py         # LangGraph StateGraph (the agentic core)
 ├── main.py                 # CLI entry point + Orchestrator wrapper
@@ -208,7 +207,6 @@ The default `EVAL_WEIGHTS`:
 
 - System design / spec: [`docs/PROJECT_SPEC_V2.md`](./docs/PROJECT_SPEC_V2.md)
 - Execution / task plan: [`docs/TASK_CHECKLIST.md`](./docs/TASK_CHECKLIST.md)
-- Demo walkthrough: [`docs/DEMO_SCRIPT.md`](./docs/DEMO_SCRIPT.md)
 - Final written report: [`docs/report.md`](./docs/report.md)
 
 ## Security Notes
