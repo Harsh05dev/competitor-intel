@@ -59,12 +59,18 @@ if DARK:
     TEXT, TEXT2, TEXT3, TEXT4 = "#f5f7fb", "#c5c9dd", "#7a82a8", "#4a516e"
     ACCENT           = "#00d4aa"
     RED, BLUE, AMBER = "#f87171", "#818cf8", "#fbbf24"
+    SHADOW_LG        = "0 12px 40px -16px rgba(0,0,0,0.55)"
+    SHADOW_MD        = "0 8px 24px -10px rgba(0,0,0,0.5)"
+    GLOW_STRENGTH    = "55"  # alpha hex for text-shadow glows on dark
 else:
-    BG, BG2, BG3     = "#fafbfc", "#ffffff", "#f3f4f8"
-    BORDER           = "#e1e4ed"
-    TEXT, TEXT2, TEXT3, TEXT4 = "#0a0c14", "#2d3344", "#6b7390", "#a0a6bf"
+    BG, BG2, BG3     = "#f4f6fb", "#ffffff", "#eef0f7"
+    BORDER           = "#dadeea"
+    TEXT, TEXT2, TEXT3, TEXT4 = "#0a0c14", "#2d3344", "#5a6280", "#8a92ac"
     ACCENT           = "#008566"
     RED, BLUE, AMBER = "#dc2626", "#4f46e5", "#b45309"
+    SHADOW_LG        = "0 12px 40px -16px rgba(15,23,42,0.12)"
+    SHADOW_MD        = "0 6px 18px -8px rgba(15,23,42,0.10)"
+    GLOW_STRENGTH    = "00"  # disable text-shadow on light (alpha 00 = transparent)
 
 ACC_BG  = f"{ACCENT}18"
 ACC_BOR = f"{ACCENT}55"
@@ -83,8 +89,8 @@ header[data-testid="stHeader"] {{
     top: 0 !important;
     z-index: 999990 !important;
     height: auto !important;
-    min-height: 2.75rem !important;
-    padding: 0.35rem 0 0 0 !important;
+    min-height: 2rem !important;
+    padding: 0 !important;
     overflow: visible !important;
 }}
 
@@ -92,7 +98,7 @@ header[data-testid="stHeader"] {{
 button[data-testid="collapsedControl"] {{
     position: fixed !important;
     left: 0 !important;
-    top: clamp(5rem, 14vh, 7.5rem) !important;
+    top: clamp(4rem, 10vh, 6rem) !important;
     z-index: 999999 !important;
     display: flex !important;
     align-items: center !important;
@@ -141,7 +147,7 @@ html, body, [class*="css"] {{
     background-attachment: fixed !important;
 }}
 .block-container {{
-    padding: 1.5rem 2rem 3rem 2rem !important;
+    padding: 0.35rem 2rem 3rem 2rem !important;
     max-width: 1200px !important;
 }}
 
@@ -153,7 +159,7 @@ section[data-testid="stSidebar"] {{
     box-shadow: 1px 0 0 0 {ACCENT}14 inset !important;
 }}
 section[data-testid="stSidebar"] > div {{
-    padding: 1.5rem 1.1rem !important;
+    padding: 0.5rem 1.1rem 1.35rem 1.1rem !important;
 }}
 
 .stButton > button {{
@@ -269,7 +275,7 @@ li[role="option"]:hover, li[aria-selected="true"] {{
     margin: 1.5rem 0;
     box-shadow:
         0 1px 0 rgba(255,255,255,0.03) inset,
-        0 12px 40px -16px rgba(0,0,0,0.5);
+        {SHADOW_LG};
 }}
 .metric-cell {{
     background: linear-gradient(180deg, {BG2} 0%, {BG3} 100%);
@@ -279,14 +285,14 @@ li[role="option"]:hover, li[aria-selected="true"] {{
 .metric-cell::before {{
     content: '';
     position: absolute; top: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, {ACCENT}33, transparent);
+    background: linear-gradient(90deg, transparent, {ACCENT}55, transparent);
 }}
-.m-label {{ font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700; color: {TEXT3}; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 0.55rem; }}
+.m-label {{ font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700; color: {TEXT3}; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 0.55rem; }}
 .m-value {{ font-family: 'Space Mono', monospace; font-size: 2.1rem; font-weight: 700; line-height: 1; color: {TEXT}; letter-spacing: -0.02em; }}
-.m-value.teal  {{ color: {ACCENT}; text-shadow: 0 0 20px {ACCENT}66; }}
-.m-value.red   {{ color: {RED}; text-shadow: 0 0 20px {RED}55; }}
-.m-value.blue  {{ color: {BLUE}; text-shadow: 0 0 20px {BLUE}55; }}
-.m-value.amber {{ color: {AMBER}; text-shadow: 0 0 20px {AMBER}55; }}
+.m-value.teal  {{ color: {ACCENT}; text-shadow: 0 0 22px {ACCENT}{GLOW_STRENGTH}; }}
+.m-value.red   {{ color: {RED}; text-shadow: 0 0 22px {RED}{GLOW_STRENGTH}; }}
+.m-value.blue  {{ color: {BLUE}; text-shadow: 0 0 22px {BLUE}{GLOW_STRENGTH}; }}
+.m-value.amber {{ color: {AMBER}; text-shadow: 0 0 22px {AMBER}{GLOW_STRENGTH}; }}
 .m-sub {{ font-size: 0.67rem; color: {TEXT3}; margin-top: 0.4rem; font-family: 'Space Mono', monospace; font-weight: 400; }}
 
 .sec-head {{
@@ -425,7 +431,8 @@ SIDE_LABEL_ICON = f"display:inline-block;width:5px;height:5px;border-radius:50%;
 
 with st.sidebar:
     st.markdown(
-        f'<div style="font-family:\'Space Mono\',monospace;font-size:0.82rem;font-weight:700;background:linear-gradient(90deg,{ACCENT},{BLUE});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:0.18em;text-transform:uppercase;padding-bottom:1rem;border-bottom:1px solid {BORDER};margin-bottom:1.2rem;">⚡ Competitor Intel</div>',
+        f'<div style="display:flex;align-items:center;gap:0.45rem;font-family:\'Space Mono\',monospace;font-weight:700;padding-bottom:0.85rem;border-bottom:1px solid {BORDER};margin-bottom:1rem;line-height:1.2;"><span style="font-size:1.35rem;line-height:1;color:{ACCENT};filter:drop-shadow(0 0 10px {ACCENT}55);">⚡</span>'
+        f'<span style="font-size:1.06rem;background:linear-gradient(90deg,{ACCENT},{BLUE});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:0.14em;text-transform:uppercase;">Competitor Intel</span></div>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -490,16 +497,16 @@ with st.sidebar:
 
 # ── Header ─────────────────────────────────────────────────────────────────────
 st.markdown(f"""
-<div style="display:flex;align-items:center;gap:1rem;padding:1.1rem 0 1.1rem 0;border-bottom:1px solid {BORDER};margin-bottom:1.4rem;flex-wrap:wrap;">
-    <div style="font-family:Space Mono,monospace;font-size:1.2rem;font-weight:700;color:{TEXT};">Competitor Intel</div>
-    <div style="font-family:Space Mono,monospace;font-size:0.58rem;color:{ACCENT};background:{ACC_BG};border:1px solid {ACC_BOR};border-radius:999px;padding:0.18rem 0.7rem;letter-spacing:0.07em;">AGENTIC AI · CS 301</div>
-    <div style="font-size:0.76rem;color:{TEXT3};font-style:italic;">"Know your market before your market knows you."</div>
-    <div style="margin-left:auto;font-family:Space Mono,monospace;font-size:0.58rem;color:{MODE_BADGE_COLOR};background:{MODE_BADGE_BG};border:1px solid {MODE_BADGE_BORDER};border-radius:6px;padding:0.22rem 0.65rem;">● {"DEMO" if DEMO else "LIVE"} MODE</div>
+<div style="display:flex;align-items:center;gap:1.15rem;padding:0.45rem 0 0.95rem 0;border-bottom:1px solid {BORDER};margin-bottom:1.25rem;margin-top:0;flex-wrap:wrap;">
+    <div style="display:flex;align-items:center;gap:0.55rem;"><span style="font-size:2.1rem;line-height:1;filter:drop-shadow(0 0 14px {ACCENT}55);">⚡</span><div style="font-family:Space Mono,monospace;font-size:2rem;font-weight:700;color:{TEXT};letter-spacing:-0.025em;line-height:1.05;">Competitor Intel</div></div>
+    <div style="font-family:Space Mono,monospace;font-size:0.82rem;color:{ACCENT};background:{ACC_BG};border:1px solid {ACC_BOR};border-radius:999px;padding:0.32rem 0.95rem;letter-spacing:0.08em;font-weight:700;">AGENTIC AI · CS 301</div>
+    <div style="font-size:1.05rem;color:{TEXT2};font-style:italic;line-height:1.4;max-width:32rem;font-weight:450;">"Know your market before your market knows you."</div>
+    <div style="margin-left:auto;font-family:Space Mono,monospace;font-size:0.82rem;font-weight:700;color:{MODE_BADGE_COLOR};background:{MODE_BADGE_BG};border:1px solid {MODE_BADGE_BORDER};border-radius:8px;padding:0.4rem 0.95rem;letter-spacing:0.05em;">● {"DEMO" if DEMO else "LIVE"} MODE</div>
 </div>
 """, unsafe_allow_html=True)
 
 if DEMO:
-    st.markdown(f'<div style="background:{ACC_BG};border:1px solid {ACC_BOR};border-radius:8px;padding:0.6rem 0.9rem;font-family:Space Mono,monospace;font-size:0.68rem;color:{ACCENT};letter-spacing:0.04em;margin-bottom:1.1rem;">⚡ DEMO MODE — pre-computed Stripe vs fintech · Switch to LIVE in sidebar for real analysis</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background:linear-gradient(135deg,{ACCENT}1f,{ACCENT}0a);border:1px solid {ACC_BOR};border-radius:9px;padding:0.75rem 1rem;font-family:Space Mono,monospace;font-size:0.82rem;color:{ACCENT};letter-spacing:0.04em;margin-bottom:1.2rem;font-weight:600;box-shadow:0 2px 12px -4px {ACCENT}33;">⚡ DEMO MODE — pre-computed Stripe vs fintech · Switch to LIVE in sidebar for real analysis</div>', unsafe_allow_html=True)
 
 # ── Inputs ─────────────────────────────────────────────────────────────────────
 col1, col2, col3 = st.columns([5, 3, 2])
@@ -699,4 +706,16 @@ else:
     st.markdown(f'<div style="margin-top:5rem;text-align:center;padding:2rem;"><div style="font-size:2.2rem;margin-bottom:1rem;opacity:0.1;">⚡</div><div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{TEXT4};letter-spacing:0.25em;text-transform:uppercase;margin-bottom:0.5rem;">System Ready</div><div style="font-family:Space Mono,monospace;font-size:0.76rem;color:{TEXT3};margin-bottom:0.35rem;">Select a company → click ▶ RUN</div><div style="font-size:0.72rem;color:{TEXT4};">{"Demo mode active — no API key needed" if DEMO else "Live mode — paste your Gemini key in the sidebar"}</div></div>', unsafe_allow_html=True)
 
 # ── Footer ──────────────────────────────────────────────────────────────────────
-st.markdown(f'<div style="margin-top:3rem;padding:1.2rem 0 0.5rem 0;border-top:1px solid {BORDER};display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;"><div><div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.07em;">⚡ COMPETITOR-INTEL · AGENTIC AI SYSTEM · CS 301 · NJIT · 2025</div><div style="font-family:Space Mono,monospace;font-size:0.56rem;color:{TEXT4};margin-top:0.22rem;">Powered by LangGraph + Gemini 2.5 · 4-agent pipeline with iterative refinement</div></div><div style="text-align:right;"><div style="font-size:0.7rem;color:{TEXT3};">Built by</div><div style="font-family:Space Mono,monospace;font-size:0.62rem;color:{ACCENT};letter-spacing:0.05em;">HARSH · RAYANSH · SHIPPY</div></div></div>', unsafe_allow_html=True)
+st.markdown(
+    f'<div style="margin-top:3rem;padding:1.5rem 0 0.6rem 0;border-top:1px solid {BORDER};display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.8rem;">'
+    f'<div>'
+    f'<div style="font-family:Space Mono,monospace;font-size:0.78rem;font-weight:700;color:{TEXT2};letter-spacing:0.08em;">⚡ COMPETITOR-INTEL · AGENTIC AI SYSTEM · CS 301 · NJIT · 2025</div>'
+    f'<div style="font-family:Space Mono,monospace;font-size:0.7rem;color:{TEXT3};margin-top:0.35rem;font-weight:500;">Powered by <span style="color:{ACCENT};font-weight:700;">LangGraph</span> + <span style="color:{BLUE};font-weight:700;">Gemini 2.5</span> · 4-agent pipeline with iterative refinement</div>'
+    f'</div>'
+    f'<div style="text-align:right;">'
+    f'<div style="font-size:0.78rem;color:{TEXT3};margin-bottom:0.2rem;font-weight:500;">Built by</div>'
+    f'<div style="font-family:Space Mono,monospace;font-size:0.82rem;font-weight:700;background:linear-gradient(90deg,{ACCENT},{BLUE});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:0.06em;">HARSH · RAYANSH · SHIPPY</div>'
+    f'</div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
