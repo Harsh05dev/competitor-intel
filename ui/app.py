@@ -581,13 +581,13 @@ def _build_fallback_report_md(result: dict) -> str:
 def run_demo_mode(company, industry):
     slot = st.empty(); bar = st.progress(0)
     for msg, pct, delay in [
-        (f"researcher → scanning {industry} competitors...", 0.15, 2.9),
-        ("categorizer → structuring raw data...",            0.32, 2.7),
-        ("analyst → generating SWOT analysis...",           0.50, 2.8),
-        ("evaluator → scoring... [iter 1: 61/100 ✗]",      0.65, 2.6),
-        ("researcher → filling 2 gaps (targeted)...",       0.78, 2.9),
-        ("evaluator → rescoring... [iter 2: 78/100 ✓]",    0.90, 2.6),
-        ("format → compiling final report...",               1.00, 2.4),
+        (f"researcher → scanning {industry} competitors...", 0.15, 3.9),
+        ("categorizer → structuring raw data...",            0.32, 3.7),
+        ("analyst → generating SWOT analysis...",           0.50, 3.8),
+        ("evaluator → scoring... [iter 1: 61/100 ✗]",      0.65, 3.6),
+        ("researcher → filling 2 gaps (targeted)...",       0.78, 3.9),
+        ("evaluator → rescoring... [iter 2: 78/100 ✓]",    0.90, 3.6),
+        ("format → compiling final report...",               1.00, 3.4),
     ]:
         slot.markdown(f'<div class="prog-row"><div class="prog-dot"></div>{msg}</div>', unsafe_allow_html=True)
         bar.progress(pct); time.sleep(delay)
