@@ -49,6 +49,7 @@ if not st.session_state.get("_sidebar_session_opened"):
 
 DARK = st.session_state.theme == "dark"
 DEMO = st.session_state.mode  == "demo"
+live_api_key = ""
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
 if DARK:
@@ -373,9 +374,8 @@ with st.sidebar:
 
     if not DEMO:
         st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{TEXT3};letter-spacing:0.13em;text-transform:uppercase;margin-bottom:0.4rem;">Gemini API Key</div>', unsafe_allow_html=True)
-        api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed")
-        if api_key:
-            os.environ["GEMINI_API_KEY"] = api_key
+        live_api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed").strip()
+        if live_api_key:
             st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.58rem;color:{ACCENT};margin-top:0.2rem;">✓ key loaded</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.58rem;color:{AMBER};margin-top:0.2rem;">⚠ paste key to run</div>', unsafe_allow_html=True)
@@ -532,13 +532,13 @@ def run_demo_mode(company, industry):
     slot.empty(); bar.empty()
     return {**DEMO_RESULT, "target_company": company, "industry": industry}
 
-def run_live_mode(company, industry):
+def run_live_mode(company, industry, api_key):
     from main import Orchestrator
     slot = st.empty(); bar = st.progress(0)
     slot.markdown(f'<div class="prog-row"><div class="prog-dot"></div>researcher → scanning competitors...</div>', unsafe_allow_html=True)
     bar.progress(0.1)
     with st.spinner(""):
-        result = Orchestrator().run(company=company, industry=industry)
+        result = Orchestrator(api_key=api_key).run(company=company, industry=industry)
     slot.empty(); bar.empty()
     return result
 
@@ -551,10 +551,10 @@ if run_btn:
     if DEMO:
         result = run_demo_mode(company_final, industry_final)
     else:
-        if not os.environ.get("GEMINI_API_KEY", ""):
+        if not live_api_key:
             st.error("Paste your Gemini API key in the sidebar first."); st.stop()
         try:
-            result = run_live_mode(company_final, industry_final)
+            result = run_live_mode(company_final, industry_final, live_api_key)
         except Exception as e:
             st.error(f"Pipeline error: {e}"); st.stop()
 
