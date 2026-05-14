@@ -14,7 +14,7 @@ Round 2+ (iteration > 0): targeted research — use the Evaluator's
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -51,15 +51,18 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
+        self._client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+        api_key = (self.api_key or os.getenv("GEMINI_API_KEY", "")).strip()
+        if self.client is None or self._client_api_key != api_key:
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     def research(self, state: AgentState) -> Dict[str, Any]:
@@ -140,17 +143,32 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
+            existing = {}
+            unnamed = []
+            for result in state["research_results"]:
+                key = self._company_key(result)
+                if key:
+                    existing[key] = result
+                elif isinstance(result, dict):
+                    unnamed.append(result)
             for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
+                if not isinstance(new_comp, dict):
+                    continue
+                key = self._company_key(new_comp)
+                if not key:
+                    unnamed.append(new_comp)
+                    continue
                 if key in existing:
                     # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
+                    combined = self._as_list(existing[key].get("raw_snippets")) + self._as_list(new_comp.get("raw_snippets"))
                     existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
+                    sources = self._as_list(existing[key].get("sources")) + self._as_list(new_comp.get("sources"))
+                    existing[key]["sources"] = list(dict.fromkeys(sources))
                 else:
+                    new_comp["raw_snippets"] = self._as_list(new_comp.get("raw_snippets"))
+                    new_comp["sources"] = self._as_list(new_comp.get("sources"))
                     existing[key] = new_comp
-            data = list(existing.values())
+            data = unnamed + list(existing.values())
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
@@ -173,7 +191,17 @@ class ResearcherAgent:
             print("  [Researcher] Warning: no JSON array found in response")
             return []
         try:
-            return json.loads(cleaned[start:end])
+            data = json.loads(cleaned[start:end])
+            return data if isinstance(data, list) else []
         except json.JSONDecodeError as e:
             print(f"  [Researcher] JSON parse error: {e}")
             return []
+
+    def _company_key(self, competitor: Any) -> str:
+        if not isinstance(competitor, dict):
+            return ""
+        name = competitor.get("company_name")
+        return name.strip().lower() if isinstance(name, str) and name.strip() else ""
+
+    def _as_list(self, value: Any) -> list:
+        return value if isinstance(value, list) else []
