@@ -46,10 +46,24 @@ _evaluator   = None
 def _get_agents():
     global _researcher, _categorizer, _analyst, _evaluator
     if _researcher is None:
-        _researcher = ResearcherAgent()
-        _categorizer = CategorizerAgent()
-        _analyst = AnalystAgent()
-        _evaluator = EvaluatorAgent()
+        _researcher, _categorizer, _analyst, _evaluator = _create_agents()
+    return _researcher, _categorizer, _analyst, _evaluator
+
+
+def _create_agents(api_key: str = None):
+    return (
+        ResearcherAgent(api_key=api_key),
+        CategorizerAgent(api_key=api_key),
+        AnalystAgent(api_key=api_key),
+        EvaluatorAgent(api_key=api_key),
+    )
+
+
+def _agents_for_run(api_key: str = None):
+    # User-entered keys must never share cached clients across Streamlit sessions.
+    if api_key:
+        return _create_agents(api_key=api_key)
+    return _get_agents()
 
 
 # ── NODE FUNCTIONS ─────────────────────────────────────────────────────────────
@@ -232,7 +246,7 @@ def route_after_evaluation(state: AgentState) -> str:
 
 # ── GRAPH BUILDER ──────────────────────────────────────────────────────────────
 
-def build_graph():
+def build_graph(api_key: str = None):
     """
     Constructs and compiles the LangGraph StateGraph.
 
@@ -240,14 +254,69 @@ def build_graph():
     Edges:    researcher→categorizer→analyst→evaluator (fixed, always)
     Cond edge: evaluator → {retry: researcher, finalize: format_report}
     """
-    _get_agents()
+    researcher, categorizer, analyst, evaluator = _agents_for_run(api_key=api_key)
+
+    def run_researcher_node(state: AgentState) -> dict:
+        ev = state.get("evaluation", {})
+        if ev.get("suggested_queries"):
+            state = {
+                **state,
+                "evaluation": {
+                    **ev,
+                    "suggested_queries": ev["suggested_queries"][: config.MAX_GAPS_PER_RETRY],
+                },
+            }
+        print(f"\n[Graph] → researcher_node (iteration {state['iteration']})")
+        result = researcher.research(state)
+        log_entry = f"[Iter {state['iteration']}] Researcher: found {len(result.get('research_results', []))} competitors"
+        return {
+            **result,
+            "status": "researched",
+            "logs": state.get("logs", []) + [log_entry],
+        }
+
+    def run_categorizer_node(state: AgentState) -> dict:
+        print(f"\n[Graph] → categorizer_node (iteration {state['iteration']})")
+        result = categorizer.categorize(state)
+        log_entry = f"[Iter {state['iteration']}] Categorizer: structured {len(result.get('categorized_competitors', []))} competitors"
+        return {
+            **result,
+            "status": "categorized",
+            "logs": state.get("logs", []) + [log_entry],
+        }
+
+    def run_analyst_node(state: AgentState) -> dict:
+        print(f"\n[Graph] → analyst_node (iteration {state['iteration']})")
+        result = analyst.analyze(state)
+        swot = result.get("analysis", {}).get("swot", {})
+        total_points = sum(len(v) for v in swot.values() if isinstance(v, list))
+        log_entry = f"[Iter {state['iteration']}] Analyst: generated SWOT with {total_points} points"
+        return {
+            **result,
+            "status": "analyzed",
+            "logs": state.get("logs", []) + [log_entry],
+        }
+
+    def run_evaluator_node(state: AgentState) -> dict:
+        print(f"\n[Graph] → evaluator_node (iteration {state['iteration']})")
+        result = evaluator.evaluate(state)
+        score  = result.get("evaluation", {}).get("score", 0)
+        passed = result.get("evaluation", {}).get("passed", False)
+        log_entry = f"[Iter {state['iteration']}] Evaluator: score={score}/100 {'PASSED ✓' if passed else 'FAILED ✗'}"
+        return {
+            **result,
+            "iteration": state["iteration"] + 1,
+            "status": "evaluated",
+            "logs": state.get("logs", []) + [log_entry],
+        }
+
     graph = StateGraph(AgentState)
 
     # ── Register nodes ─────────────────────────────────────────────────────────
-    graph.add_node("researcher",   researcher_node)
-    graph.add_node("categorizer",  categorizer_node)
-    graph.add_node("analyst",      analyst_node)
-    graph.add_node("evaluator",    evaluator_node)
+    graph.add_node("researcher",   run_researcher_node)
+    graph.add_node("categorizer",  run_categorizer_node)
+    graph.add_node("analyst",      run_analyst_node)
+    graph.add_node("evaluator",    run_evaluator_node)
     graph.add_node("format_report", format_report_node)
 
     # ── Fixed edges (always flow forward) ──────────────────────────────────────
