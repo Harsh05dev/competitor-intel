@@ -57,12 +57,13 @@ Rules:
 
 
 class AnalystAgent:
-    def __init__(self):
+    def __init__(self, api_key: str = None):
+        self.api_key = (api_key or "").strip()
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)

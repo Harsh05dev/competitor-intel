@@ -51,12 +51,13 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: str = None):
+        self.api_key = (api_key or "").strip()
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -140,17 +141,30 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
+            existing = {}
+            unnamed = []
+            for result in state["research_results"]:
+                if not isinstance(result, dict):
+                    continue
+                key = (result.get("company_name") or "").strip().lower()
+                if key:
+                    existing[key] = result
+                else:
+                    unnamed.append(result)
             for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
+                if not isinstance(new_comp, dict):
+                    continue
+                key = (new_comp.get("company_name") or "").strip().lower()
                 if key in existing:
                     # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
+                    combined = existing[key].get("raw_snippets", []) + new_comp.get("raw_snippets", [])
                     existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
-                else:
+                    existing[key]["sources"] = existing[key].get("sources", []) + new_comp.get("sources", [])
+                elif key:
                     existing[key] = new_comp
-            data = list(existing.values())
+                else:
+                    unnamed.append(new_comp)
+            data = list(existing.values()) + unnamed
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
