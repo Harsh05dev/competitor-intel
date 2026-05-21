@@ -10,7 +10,7 @@ This is where organized data becomes actionable intelligence.
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -57,12 +57,13 @@ Rules:
 
 
 class AnalystAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -72,9 +73,13 @@ class AnalystAgent:
         target      = state.get("target_company", "Unknown")
         industry    = state.get("industry", "")
         competitors = state.get("categorized_competitors", [])
+        iteration   = state.get("iteration", 0)
+        existing    = state.get("analysis") or {}
 
         if not competitors:
             print("  [Analyst] No categorized data to analyze")
+            if existing:
+                return {"analysis": existing}
             return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
 
         print(f"  [Analyst] Analyzing {target} against {len(competitors)} competitors")
@@ -127,10 +132,16 @@ class AnalystAgent:
                 print(f"  [Analyst] {model} failed: {e}")
 
         if not response:
+            if iteration > 0 and existing:
+                print("  [Analyst] All models failed — preserving existing analysis")
+                return {"analysis": existing}
             print("  [Analyst] All models failed — returning empty analysis")
             return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
 
         analysis = self._parse_json_object(response.text or "")
+        if not analysis and iteration > 0 and existing:
+            print("  [Analyst] Empty analysis response — preserving existing analysis")
+            return {"analysis": existing}
 
         # Log SWOT depth for visibility
         swot = analysis.get("swot", {})
