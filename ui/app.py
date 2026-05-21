@@ -444,10 +444,10 @@ with st.sidebar:
     mc1, mc2 = st.columns(2)
     with mc1:
         if st.button("⚡ DEMO", key="btn_demo"):
-            st.session_state.mode = "demo"; st.rerun()
+            st.session_state.mode = "demo"; st.session_state.pop("last_result", None); st.rerun()
     with mc2:
         if st.button("🔴 LIVE", key="btn_live"):
-            st.session_state.mode = "live"; st.rerun()
+            st.session_state.mode = "live"; st.session_state.pop("last_result", None); st.rerun()
 
     mc = ACCENT if DEMO else RED
     mt = "● DEMO — no key needed" if DEMO else "● LIVE — key required"
@@ -458,10 +458,11 @@ with st.sidebar:
 
     if not DEMO:
         st.markdown(f'<div style="{SIDE_LABEL}"><span style="{SIDE_LABEL_ICON}"></span>Gemini API Key</div>', unsafe_allow_html=True)
-        api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed")
+        api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed", key="gemini_api_key")
         if api_key:
-            os.environ["GEMINI_API_KEY"] = api_key
             st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{ACCENT};margin-top:0.35rem;">✓ key loaded</div>', unsafe_allow_html=True)
+        elif os.environ.get("GEMINI_API_KEY", ""):
+            st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{ACCENT};margin-top:0.35rem;">✓ deployment key loaded</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{AMBER};margin-top:0.35rem;">⚠ paste key to run</div>', unsafe_allow_html=True)
         st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.6rem;color:{TEXT3};margin-top:0.35rem;font-weight:500;">free key → <span style="color:{ACCENT};">ai.google.dev</span></div>', unsafe_allow_html=True)
@@ -634,13 +635,13 @@ def run_demo_mode(company, industry):
     slot.empty(); bar.empty()
     return {**DEMO_RESULT, "target_company": company, "industry": industry}
 
-def run_live_mode(company, industry):
+def run_live_mode(company, industry, api_key=None):
     from main import Orchestrator
     slot = st.empty(); bar = st.progress(0)
     slot.markdown(f'<div class="prog-row"><div class="prog-dot"></div>researcher → scanning competitors...</div>', unsafe_allow_html=True)
     bar.progress(0.1)
     with st.spinner(""):
-        result = Orchestrator().run(company=company, industry=industry)
+        result = Orchestrator().run(company=company, industry=industry, api_key=api_key)
     slot.empty(); bar.empty()
     return result
 
@@ -653,13 +654,17 @@ if run_btn:
     if DEMO:
         result = run_demo_mode(company_final, industry_final)
     else:
-        if not os.environ.get("GEMINI_API_KEY", ""):
+        user_api_key = st.session_state.get("gemini_api_key", "").strip()
+        if not user_api_key and not os.environ.get("GEMINI_API_KEY", ""):
             st.error("Paste your Gemini API key in the sidebar first."); st.stop()
         try:
-            result = run_live_mode(company_final, industry_final)
+            result = run_live_mode(company_final, industry_final, api_key=user_api_key or None)
         except Exception as e:
             st.error(f"Pipeline error: {e}"); st.stop()
+    st.session_state.last_result = result
 
+result = st.session_state.get("last_result")
+if result:
     ev = result.get("evaluation", {})
     render_metrics(ev.get("score",0), ev.get("passed",False), result.get("research_results",[]), result.get("iteration",1))
 
@@ -697,7 +702,7 @@ if run_btn:
             st.download_button(
                 "⬇ Download PDF Report",
                 data=pdf_bytes,
-                file_name=f"{company_final}_competitor_report.pdf",
+                file_name=f"{result.get('target_company', company_final)}_competitor_report.pdf",
                 mime="application/pdf",
             )
     except Exception:

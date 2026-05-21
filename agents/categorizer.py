@@ -16,7 +16,7 @@ overwrites existing good data.
 
 import os
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -51,12 +51,13 @@ Rules:
 
 
 class CategorizerAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -138,11 +139,15 @@ class CategorizerAgent:
         - New competitors found in re-research: append
         Never overwrites existing data.
         """
-        new_map = {c.get("company_name", "").lower(): c for c in new_data}
+        new_map = {
+            self._company_key(c): c
+            for c in new_data
+            if isinstance(c, dict) and self._company_key(c)
+        }
         merged  = []
 
         for comp in existing:
-            key     = comp.get("company_name", "").lower()
+            key     = self._company_key(comp)
             new_comp = new_map.get(key, {})
 
             # Fill string fields only if missing
@@ -160,12 +165,15 @@ class CategorizerAgent:
             merged.append(comp)
 
         # Append any completely new competitors
-        existing_keys = {c.get("company_name", "").lower() for c in existing}
+        existing_keys = {self._company_key(c) for c in existing if isinstance(c, dict)}
         for name_key, comp in new_map.items():
             if name_key not in existing_keys:
                 merged.append(comp)
 
         return merged
+
+    def _company_key(self, comp: dict) -> str:
+        return str((comp or {}).get("company_name") or "").strip().lower()
 
     def _parse_json_list(self, text: str) -> list:
         """Extract JSON array from LLM response."""
