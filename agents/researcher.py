@@ -14,7 +14,7 @@ Round 2+ (iteration > 0): targeted research — use the Evaluator's
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -51,12 +51,13 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -128,35 +129,94 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
-            print("  [Researcher] All models failed — returning empty results")
+            print("  [Researcher] All models failed — preserving existing results")
             return {
-                "research_results": [],
+                "research_results": state.get("research_results", []) if iteration > 0 else [],
                 "iteration": iteration,
             }
 
         # ── Parse JSON response ────────────────────────────────────────────────
         text = response.text or ""
-        data = self._parse_json_list(text)
+        data = self._sanitize_results(self._parse_json_list(text))
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
-            for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
-                if key in existing:
-                    # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
-                    existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
-                else:
-                    existing[key] = new_comp
-            data = list(existing.values())
-
+            data = self._merge_results(state["research_results"], data)
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
             "research_results": data,
             "iteration": iteration,
         }
+
+    def _merge_results(self, existing_results: list, new_results: list) -> list:
+        """Merge retry findings without assuming perfect LLM-shaped data."""
+        merged = []
+        index = {}
+
+        for result in existing_results:
+            if not isinstance(result, dict):
+                continue
+            key = self._company_key(result)
+            if key:
+                index[key] = len(merged)
+            merged.append(result)
+
+        for new_comp in new_results:
+            key = self._company_key(new_comp)
+            if not key:
+                continue
+            if key in index:
+                existing = merged[index[key]]
+                snippets = self._dedupe(
+                    self._as_list(existing.get("raw_snippets")) +
+                    self._as_list(new_comp.get("raw_snippets"))
+                )
+                sources = self._dedupe(
+                    self._as_list(existing.get("sources")) +
+                    self._as_list(new_comp.get("sources"))
+                )
+                existing["raw_snippets"] = snippets
+                existing["sources"] = sources
+            else:
+                index[key] = len(merged)
+                merged.append(new_comp)
+        return merged
+
+    def _sanitize_results(self, data: list) -> list:
+        sanitized = []
+        if not isinstance(data, list):
+            return sanitized
+        for item in data:
+            if not isinstance(item, dict) or not self._company_key(item):
+                continue
+            item["raw_snippets"] = self._as_list(item.get("raw_snippets"))
+            item["sources"] = self._as_list(item.get("sources"))
+            sanitized.append(item)
+        return sanitized
+
+    @staticmethod
+    def _company_key(result: dict) -> str:
+        name = result.get("company_name") if isinstance(result, dict) else None
+        return name.strip().lower() if isinstance(name, str) else ""
+
+    @staticmethod
+    def _as_list(value: Any) -> list:
+        if isinstance(value, list):
+            return value
+        if value:
+            return [value]
+        return []
+
+    @staticmethod
+    def _dedupe(values: list) -> list:
+        deduped = []
+        seen = set()
+        for value in values:
+            marker = value if isinstance(value, (str, int, float, bool, type(None))) else repr(value)
+            if marker not in seen:
+                seen.add(marker)
+                deduped.append(value)
+        return deduped
 
     def _parse_json_list(self, text: str) -> list:
         """Extract a JSON array from LLM response, handling markdown fences."""
