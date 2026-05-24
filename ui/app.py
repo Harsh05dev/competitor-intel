@@ -659,6 +659,9 @@ if run_btn:
         st.error("Please select or enter a company name."); st.stop()
     if not industry_final or not industry_final.strip():
         st.error("Industry is required."); st.stop()
+    if DEMO and (company_final != "Stripe" or industry_final != "fintech"):
+        st.error("Demo mode uses the pre-computed Stripe / fintech report. Switch to LIVE for other companies.")
+        st.stop()
     if DEMO:
         result = run_demo_mode(company_final, industry_final)
     else:
