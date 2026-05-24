@@ -51,12 +51,13 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -128,6 +129,13 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
+            existing_results = state.get("research_results", [])
+            if iteration > 0 and existing_results:
+                print("  [Researcher] All models failed — preserving existing results")
+                return {
+                    "research_results": existing_results,
+                    "iteration": iteration,
+                }
             print("  [Researcher] All models failed — returning empty results")
             return {
                 "research_results": [],
@@ -140,16 +148,30 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
+            existing = {}
+            for r in state["research_results"]:
+                key = (r.get("company_name") or "").lower()
+                if key:
+                    existing[key] = {
+                        **r,
+                        "raw_snippets": list(r.get("raw_snippets") or []),
+                        "sources": list(r.get("sources") or []),
+                    }
             for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
+                key = (new_comp.get("company_name") or "").lower()
+                if not key:
+                    continue
                 if key in existing:
                     # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
+                    combined = existing[key]["raw_snippets"] + (new_comp.get("raw_snippets") or [])
                     existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
+                    existing[key]["sources"] = list(dict.fromkeys(existing[key]["sources"] + (new_comp.get("sources") or [])))
                 else:
-                    existing[key] = new_comp
+                    existing[key] = {
+                        **new_comp,
+                        "raw_snippets": list(new_comp.get("raw_snippets") or []),
+                        "sources": list(new_comp.get("sources") or []),
+                    }
             data = list(existing.values())
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")

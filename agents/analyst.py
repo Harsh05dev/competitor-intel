@@ -57,12 +57,13 @@ Rules:
 
 
 class AnalystAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -75,7 +76,7 @@ class AnalystAgent:
 
         if not competitors:
             print("  [Analyst] No categorized data to analyze")
-            return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
+            return {"analysis": self._empty_analysis()}
 
         print(f"  [Analyst] Analyzing {target} against {len(competitors)} competitors")
 
@@ -127,10 +128,16 @@ class AnalystAgent:
                 print(f"  [Analyst] {model} failed: {e}")
 
         if not response:
+            existing_analysis = state.get("analysis") or {}
+            if existing_analysis:
+                print("  [Analyst] All models failed — preserving existing analysis")
+                return {"analysis": self._normalize_analysis(existing_analysis)}
             print("  [Analyst] All models failed — returning empty analysis")
-            return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
+            return {"analysis": self._empty_analysis()}
 
-        analysis = self._parse_json_object(response.text or "")
+        analysis = self._normalize_analysis(self._parse_json_object(response.text or ""))
+        if state.get("iteration", 0) > 0 and state.get("analysis"):
+            analysis = self._merge_analysis(state.get("analysis") or {}, analysis)
 
         # Log SWOT depth for visibility
         swot = analysis.get("swot", {})
@@ -157,3 +164,47 @@ class AnalystAgent:
         except json.JSONDecodeError as e:
             print(f"  [Analyst] JSON parse error: {e}")
             return {}
+
+    def _empty_analysis(self) -> dict:
+        return {
+            "swot": {
+                "strengths": [],
+                "weaknesses": [],
+                "opportunities": [],
+                "threats": [],
+            },
+            "comparison_matrix": [],
+            "threat_ranking": [],
+            "opportunity_gaps": [],
+        }
+
+    def _normalize_analysis(self, analysis: dict) -> dict:
+        normalized = self._empty_analysis()
+        if not isinstance(analysis, dict):
+            return normalized
+
+        swot = analysis.get("swot")
+        if isinstance(swot, dict):
+            for quadrant in normalized["swot"]:
+                values = swot.get(quadrant, [])
+                normalized["swot"][quadrant] = values if isinstance(values, list) else []
+
+        for field in ["comparison_matrix", "threat_ranking", "opportunity_gaps"]:
+            values = analysis.get(field, [])
+            normalized[field] = values if isinstance(values, list) else []
+
+        return normalized
+
+    def _merge_analysis(self, existing: dict, new_analysis: dict) -> dict:
+        existing_norm = self._normalize_analysis(existing)
+        new_norm = self._normalize_analysis(new_analysis)
+
+        merged = self._empty_analysis()
+        for quadrant in merged["swot"]:
+            new_items = new_norm["swot"].get(quadrant, [])
+            merged["swot"][quadrant] = new_items or existing_norm["swot"].get(quadrant, [])
+
+        for field in ["comparison_matrix", "threat_ranking", "opportunity_gaps"]:
+            merged[field] = new_norm.get(field) or existing_norm.get(field, [])
+
+        return merged
