@@ -14,7 +14,7 @@ Round 2+ (iteration > 0): targeted research — use the Evaluator's
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -51,12 +51,13 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
         self.client = None  # initialized lazily on first call
+        self.api_key = api_key.strip() if api_key else None
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -140,17 +141,37 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
+            existing = {}
+            unnamed = []
+            for result in state["research_results"]:
+                if not isinstance(result, dict):
+                    continue
+                name = (result.get("company_name") or "").strip()
+                if not name:
+                    unnamed.append(result)
+                    continue
+                result["raw_snippets"] = result.get("raw_snippets") or []
+                result["sources"] = result.get("sources") or []
+                existing[name.lower()] = result
+
             for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
+                if not isinstance(new_comp, dict):
+                    continue
+                key = (new_comp.get("company_name") or "").strip().lower()
+                if not key:
+                    unnamed.append(new_comp)
+                    continue
                 if key in existing:
                     # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
+                    combined = (existing[key].get("raw_snippets") or []) + (new_comp.get("raw_snippets") or [])
                     existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
+                    sources = (existing[key].get("sources") or []) + (new_comp.get("sources") or [])
+                    existing[key]["sources"] = list(dict.fromkeys(sources))
                 else:
+                    new_comp["raw_snippets"] = new_comp.get("raw_snippets") or []
+                    new_comp["sources"] = new_comp.get("sources") or []
                     existing[key] = new_comp
-            data = list(existing.values())
+            data = unnamed + list(existing.values())
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
