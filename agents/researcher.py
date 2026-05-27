@@ -128,6 +128,12 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
+            if iteration > 0:
+                print("  [Researcher] All models failed — preserving existing results")
+                return {
+                    "research_results": state.get("research_results", []),
+                    "iteration": iteration,
+                }
             print("  [Researcher] All models failed — returning empty results")
             return {
                 "research_results": [],
@@ -140,23 +146,59 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
-            for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
-                if key in existing:
-                    # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
-                    existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
-                else:
-                    existing[key] = new_comp
-            data = list(existing.values())
+            data = self._merge_results(state["research_results"], data)
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
             "research_results": data,
             "iteration": iteration,
         }
+
+    def _merge_results(self, existing_results: list, new_results: list) -> list:
+        """Merge retry research without assuming every LLM row is schema-complete."""
+        merged = []
+        existing_by_name = {}
+
+        for comp in existing_results:
+            if not isinstance(comp, dict):
+                continue
+            normalized = self._normalize_result(comp)
+            name_key = str(normalized.get("company_name") or "").strip().lower()
+            if name_key:
+                existing_by_name[name_key] = normalized
+            merged.append(normalized)
+
+        for new_comp in new_results:
+            if not isinstance(new_comp, dict):
+                continue
+            normalized = self._normalize_result(new_comp)
+            name_key = str(normalized.get("company_name") or "").strip().lower()
+            if not name_key:
+                continue
+            if name_key in existing_by_name:
+                existing = existing_by_name[name_key]
+                combined_snippets = existing["raw_snippets"] + normalized["raw_snippets"]
+                combined_sources = existing["sources"] + normalized["sources"]
+                existing["raw_snippets"] = list(dict.fromkeys(combined_snippets))
+                existing["sources"] = list(dict.fromkeys(combined_sources))
+            else:
+                existing_by_name[name_key] = normalized
+                merged.append(normalized)
+
+        return merged
+
+    def _normalize_result(self, comp: dict) -> dict:
+        normalized = dict(comp)
+        normalized["raw_snippets"] = self._as_list(comp.get("raw_snippets"))
+        normalized["sources"] = self._as_list(comp.get("sources"))
+        return normalized
+
+    def _as_list(self, value) -> list:
+        if isinstance(value, list):
+            return value
+        if value is None:
+            return []
+        return [value]
 
     def _parse_json_list(self, text: str) -> list:
         """Extract a JSON array from LLM response, handling markdown fences."""

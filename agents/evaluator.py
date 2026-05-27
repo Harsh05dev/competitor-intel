@@ -180,7 +180,12 @@ class EvaluatorAgent:
                 raw_score = criterion_data.get("score", 5)
             else:
                 raw_score = 5  # default if parsing was off
-            total += (raw_score / 10) * weight
+            try:
+                numeric_score = float(raw_score)
+            except (TypeError, ValueError):
+                numeric_score = 5
+            numeric_score = max(0, min(10, numeric_score))
+            total += (numeric_score / 10) * weight
         return int(total)
 
     def _parse_json_object(self, text: str) -> dict:
