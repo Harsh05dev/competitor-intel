@@ -24,7 +24,10 @@ class Orchestrator:
     which does: from main import Orchestrator
     """
 
-    def run(self, company: str = "Stripe", industry: str = "fintech") -> dict:
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key.strip() if api_key else None
+
+    def run(self, company: str = "Stripe", industry: str = "fintech", api_key: str = None) -> dict:
         """
         Run the full LangGraph agentic pipeline and return the final state.
 
@@ -38,7 +41,8 @@ class Orchestrator:
           - logs: full execution trace
           - status: "complete"
         """
-        return run_analysis(company=company, industry=industry)
+        explicit_api_key = api_key.strip() if api_key else self.api_key
+        return run_analysis(company=company, industry=industry, api_key=explicit_api_key)
 
 
 if __name__ == "__main__":
