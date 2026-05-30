@@ -18,7 +18,7 @@ writes and grades the SWOT, the feedback loop has no credibility.
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -65,12 +65,13 @@ Return ONLY the JSON object, no other text."""
 
 
 class EvaluatorAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -180,6 +181,11 @@ class EvaluatorAgent:
                 raw_score = criterion_data.get("score", 5)
             else:
                 raw_score = 5  # default if parsing was off
+            try:
+                raw_score = float(raw_score)
+            except (TypeError, ValueError):
+                raw_score = 5
+            raw_score = max(0, min(10, raw_score))
             total += (raw_score / 10) * weight
         return int(total)
 
