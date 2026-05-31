@@ -14,7 +14,7 @@ Round 2+ (iteration > 0): targeted research — use the Evaluator's
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -51,15 +51,18 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
         self.client = None  # initialized lazily on first call
+        self.api_key = api_key
+        self.client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+        api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
+        if self.client is None or self.client_api_key != api_key:
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
+            self.client_api_key = api_key
         return self.client
 
     def research(self, state: AgentState) -> Dict[str, Any]:
@@ -128,9 +131,9 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
-            print("  [Researcher] All models failed — returning empty results")
+            print("  [Researcher] All models failed — preserving prior retry results")
             return {
-                "research_results": [],
+                "research_results": state.get("research_results", []) if iteration > 0 else [],
                 "iteration": iteration,
             }
 
@@ -140,17 +143,32 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
+            existing = {}
+            unnamed = []
+            for existing_comp in state["research_results"]:
+                if not isinstance(existing_comp, dict):
+                    continue
+                name = existing_comp.get("company_name")
+                if isinstance(name, str) and name:
+                    existing[name.lower()] = existing_comp
+                else:
+                    unnamed.append(existing_comp)
             for new_comp in data:
+                if not isinstance(new_comp, dict):
+                    continue
                 key = new_comp.get("company_name", "").lower()
+                if not key:
+                    unnamed.append(new_comp)
+                    continue
                 if key in existing:
                     # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
+                    combined = existing[key].get("raw_snippets", []) + new_comp.get("raw_snippets", [])
                     existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
+                    combined_sources = existing[key].get("sources", []) + new_comp.get("sources", [])
+                    existing[key]["sources"] = list(dict.fromkeys(combined_sources))
                 else:
                     existing[key] = new_comp
-            data = list(existing.values())
+            data = list(existing.values()) + unnamed
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
@@ -173,7 +191,11 @@ class ResearcherAgent:
             print("  [Researcher] Warning: no JSON array found in response")
             return []
         try:
-            return json.loads(cleaned[start:end])
+            parsed = json.loads(cleaned[start:end])
         except json.JSONDecodeError as e:
             print(f"  [Researcher] JSON parse error: {e}")
             return []
+        if not isinstance(parsed, list):
+            print("  [Researcher] Warning: JSON response was not an array")
+            return []
+        return [item for item in parsed if isinstance(item, dict)]

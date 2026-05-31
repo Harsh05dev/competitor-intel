@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 # ── Session defaults ───────────────────────────────────────────────────────────
-for k, v in [("theme", "dark"), ("mode", "demo")]:
+for k, v in [("theme", "dark"), ("mode", "demo"), ("last_run", None)]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -444,10 +444,14 @@ with st.sidebar:
     mc1, mc2 = st.columns(2)
     with mc1:
         if st.button("⚡ DEMO", key="btn_demo"):
-            st.session_state.mode = "demo"; st.rerun()
+            st.session_state.mode = "demo"
+            st.session_state.last_run = None
+            st.rerun()
     with mc2:
         if st.button("🔴 LIVE", key="btn_live"):
-            st.session_state.mode = "live"; st.rerun()
+            st.session_state.mode = "live"
+            st.session_state.last_run = None
+            st.rerun()
 
     mc = ACCENT if DEMO else RED
     mt = "● DEMO — no key needed" if DEMO else "● LIVE — key required"
@@ -456,11 +460,11 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    api_key = ""
     if not DEMO:
         st.markdown(f'<div style="{SIDE_LABEL}"><span style="{SIDE_LABEL_ICON}"></span>Gemini API Key</div>', unsafe_allow_html=True)
-        api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed")
+        api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed", key="gemini_api_key")
         if api_key:
-            os.environ["GEMINI_API_KEY"] = api_key
             st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{ACCENT};margin-top:0.35rem;">✓ key loaded</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{AMBER};margin-top:0.35rem;">⚠ paste key to run</div>', unsafe_allow_html=True)
@@ -634,15 +638,31 @@ def run_demo_mode(company, industry):
     slot.empty(); bar.empty()
     return {**DEMO_RESULT, "target_company": company, "industry": industry}
 
-def run_live_mode(company, industry):
+def run_live_mode(company, industry, api_key):
     from main import Orchestrator
     slot = st.empty(); bar = st.progress(0)
     slot.markdown(f'<div class="prog-row"><div class="prog-dot"></div>researcher → scanning competitors...</div>', unsafe_allow_html=True)
     bar.progress(0.1)
     with st.spinner(""):
-        result = Orchestrator().run(company=company, industry=industry)
+        result = Orchestrator().run(company=company, industry=industry, api_key=api_key)
     slot.empty(); bar.empty()
     return result
+
+
+def build_pdf_bytes(report_md: str) -> bytes:
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=10)
+    for raw_line in report_md.split("\n"):
+        safe = raw_line.encode("latin-1", "replace").decode("latin-1")
+        if safe.strip():
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(pdf.epw, 5, text=safe)
+        else:
+            pdf.ln(4)
+    return bytes(pdf.output())
 
 # ── Run ─────────────────────────────────────────────────────────────────────────
 if run_btn:
@@ -653,13 +673,24 @@ if run_btn:
     if DEMO:
         result = run_demo_mode(company_final, industry_final)
     else:
-        if not os.environ.get("GEMINI_API_KEY", ""):
+        live_api_key = api_key.strip()
+        if not live_api_key:
             st.error("Paste your Gemini API key in the sidebar first."); st.stop()
         try:
-            result = run_live_mode(company_final, industry_final)
+            result = run_live_mode(company_final, industry_final, live_api_key)
         except Exception as e:
             st.error(f"Pipeline error: {e}"); st.stop()
 
+    st.session_state.last_run = {
+        "result": result,
+        "company": company_final,
+        "industry": industry_final,
+        "mode": st.session_state.mode,
+    }
+
+last_run = st.session_state.get("last_run")
+if last_run:
+    result = last_run["result"]
     ev = result.get("evaluation", {})
     render_metrics(ev.get("score",0), ev.get("passed",False), result.get("research_results",[]), result.get("iteration",1))
 
@@ -678,30 +709,18 @@ if run_btn:
     if not ev.get("passed") and result.get("iteration",1) >= 3:
         st.warning("Max iterations reached — report generated with best available data.")
 
-    try:
-        from fpdf import FPDF
-
-        report_md = result.get("final_output", "") or _build_fallback_report_md(result)
-        if report_md:
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Helvetica", size=10)
-            for raw_line in report_md.split("\n"):
-                safe = raw_line.encode("latin-1", "replace").decode("latin-1")[:200]
-                if safe.strip():
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(pdf.epw, 5, text=safe)
-                else:
-                    pdf.ln(4)
-            pdf_bytes = bytes(pdf.output())
+    report_md = result.get("final_output", "") or _build_fallback_report_md(result)
+    if report_md:
+        try:
+            pdf_bytes = build_pdf_bytes(report_md)
             st.download_button(
                 "⬇ Download PDF Report",
                 data=pdf_bytes,
-                file_name=f"{company_final}_competitor_report.pdf",
+                file_name=f"{last_run.get('company', 'company')}_competitor_report.pdf",
                 mime="application/pdf",
             )
-    except Exception:
-        pass
+        except Exception as e:
+            st.warning(f"PDF export unavailable: {e}")
 else:
     st.markdown(f'<div style="margin-top:5rem;text-align:center;padding:2rem;"><div style="font-size:2.2rem;margin-bottom:1rem;opacity:0.1;">⚡</div><div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{TEXT4};letter-spacing:0.25em;text-transform:uppercase;margin-bottom:0.5rem;">System Ready</div><div style="font-family:Space Mono,monospace;font-size:0.76rem;color:{TEXT3};margin-bottom:0.35rem;">Select a company → click ▶ RUN</div><div style="font-size:0.72rem;color:{TEXT4};">{"Demo mode active — no API key needed" if DEMO else "Live mode — paste your Gemini key in the sidebar"}</div></div>', unsafe_allow_html=True)
 
