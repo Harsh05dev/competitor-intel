@@ -130,7 +130,7 @@ class AnalystAgent:
                 print(f"  [Analyst] {model} failed: {e}")
 
         if not response:
-            print("  [Analyst] All models failed — returning empty analysis")
+            print("  [Analyst] All models failed — preserving prior retry analysis")
             if state.get("iteration", 0) > 0:
                 return {"analysis": state.get("analysis", {})}
             return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}

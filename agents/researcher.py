@@ -131,7 +131,7 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
-            print("  [Researcher] All models failed — returning empty results")
+            print("  [Researcher] All models failed — preserving prior retry results")
             return {
                 "research_results": state.get("research_results", []) if iteration > 0 else [],
                 "iteration": iteration,

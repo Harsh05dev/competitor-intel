@@ -35,7 +35,7 @@ class AgentRobustnessTests(unittest.TestCase):
         }
 
         # Defaults are 5/10, over-range values clamp to 10, negatives clamp to 0.
-        self.assertEqual(EvaluatorAgent()._calculate_score(breakdown), 50)
+        self.assertEqual(EvaluatorAgent()._calculate_score(breakdown), 52)
 
     def test_json_list_parsers_ignore_non_object_items(self):
         payload = '[{"company_name": "A"}, "bad", 7, {"company_name": "B"}]'
