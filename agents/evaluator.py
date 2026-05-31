@@ -18,7 +18,7 @@ writes and grades the SWOT, the feedback loop has no credibility.
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -65,15 +65,18 @@ Return ONLY the JSON object, no other text."""
 
 
 class EvaluatorAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
         self.client = None  # initialized lazily on first call
+        self.api_key = api_key
+        self.client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+        api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
+        if self.client is None or self.client_api_key != api_key:
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
+            self.client_api_key = api_key
         return self.client
 
     def evaluate(self, state: AgentState) -> Dict[str, Any]:
@@ -180,8 +183,16 @@ class EvaluatorAgent:
                 raw_score = criterion_data.get("score", 5)
             else:
                 raw_score = 5  # default if parsing was off
-            total += (raw_score / 10) * weight
+            total += (self._coerce_score(raw_score) / 10) * weight
         return int(total)
+
+    def _coerce_score(self, raw_score: Any) -> float:
+        """Normalize LLM rubric scores to the supported 0-10 range."""
+        try:
+            score = float(raw_score)
+        except (TypeError, ValueError):
+            score = 5.0
+        return max(0.0, min(10.0, score))
 
     def _parse_json_object(self, text: str) -> dict:
         """Extract JSON object from LLM response."""
@@ -196,7 +207,11 @@ class EvaluatorAgent:
             print("  [Evaluator] Warning: no JSON object found")
             return {}
         try:
-            return json.loads(cleaned[start:end])
+            parsed = json.loads(cleaned[start:end])
         except json.JSONDecodeError as e:
             print(f"  [Evaluator] JSON parse error: {e}")
             return {}
+        if not isinstance(parsed, dict):
+            print("  [Evaluator] Warning: JSON response was not an object")
+            return {}
+        return parsed
