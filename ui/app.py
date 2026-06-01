@@ -9,6 +9,8 @@ import sys, os, time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from ui.pdf_export import build_pdf_bytes
+
 st.set_page_config(
     page_title="Competitor Intel",
     page_icon="⚡",
@@ -679,21 +681,9 @@ if run_btn:
         st.warning("Max iterations reached — report generated with best available data.")
 
     try:
-        from fpdf import FPDF
-
         report_md = result.get("final_output", "") or _build_fallback_report_md(result)
         if report_md:
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Helvetica", size=10)
-            for raw_line in report_md.split("\n"):
-                safe = raw_line.encode("latin-1", "replace").decode("latin-1")[:200]
-                if safe.strip():
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(pdf.epw, 5, text=safe)
-                else:
-                    pdf.ln(4)
-            pdf_bytes = bytes(pdf.output())
+            pdf_bytes = build_pdf_bytes(report_md)
             st.download_button(
                 "⬇ Download PDF Report",
                 data=pdf_bytes,
