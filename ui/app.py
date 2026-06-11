@@ -458,9 +458,8 @@ with st.sidebar:
 
     if not DEMO:
         st.markdown(f'<div style="{SIDE_LABEL}"><span style="{SIDE_LABEL_ICON}"></span>Gemini API Key</div>', unsafe_allow_html=True)
-        api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed")
+        api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed", key="gemini_api_key")
         if api_key:
-            os.environ["GEMINI_API_KEY"] = api_key
             st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{ACCENT};margin-top:0.35rem;">✓ key loaded</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{AMBER};margin-top:0.35rem;">⚠ paste key to run</div>', unsafe_allow_html=True)
@@ -634,13 +633,13 @@ def run_demo_mode(company, industry):
     slot.empty(); bar.empty()
     return {**DEMO_RESULT, "target_company": company, "industry": industry}
 
-def run_live_mode(company, industry):
+def run_live_mode(company, industry, api_key):
     from main import Orchestrator
     slot = st.empty(); bar = st.progress(0)
     slot.markdown(f'<div class="prog-row"><div class="prog-dot"></div>researcher → scanning competitors...</div>', unsafe_allow_html=True)
     bar.progress(0.1)
     with st.spinner(""):
-        result = Orchestrator().run(company=company, industry=industry)
+        result = Orchestrator().run(company=company, industry=industry, api_key=api_key)
     slot.empty(); bar.empty()
     return result
 
@@ -653,10 +652,11 @@ if run_btn:
     if DEMO:
         result = run_demo_mode(company_final, industry_final)
     else:
-        if not os.environ.get("GEMINI_API_KEY", ""):
+        api_key = st.session_state.get("gemini_api_key", "")
+        if not api_key.strip():
             st.error("Paste your Gemini API key in the sidebar first."); st.stop()
         try:
-            result = run_live_mode(company_final, industry_final)
+            result = run_live_mode(company_final, industry_final, api_key.strip())
         except Exception as e:
             st.error(f"Pipeline error: {e}"); st.stop()
 
@@ -679,21 +679,11 @@ if run_btn:
         st.warning("Max iterations reached — report generated with best available data.")
 
     try:
-        from fpdf import FPDF
+        from ui.pdf_export import build_pdf_bytes
 
         report_md = result.get("final_output", "") or _build_fallback_report_md(result)
         if report_md:
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Helvetica", size=10)
-            for raw_line in report_md.split("\n"):
-                safe = raw_line.encode("latin-1", "replace").decode("latin-1")[:200]
-                if safe.strip():
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(pdf.epw, 5, text=safe)
-                else:
-                    pdf.ln(4)
-            pdf_bytes = bytes(pdf.output())
+            pdf_bytes = build_pdf_bytes(report_md)
             st.download_button(
                 "⬇ Download PDF Report",
                 data=pdf_bytes,
