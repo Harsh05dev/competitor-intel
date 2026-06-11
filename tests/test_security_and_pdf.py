@@ -1,5 +1,58 @@
+import sys
+import types as module_types
 import unittest
 from unittest.mock import patch
+
+
+def _install_dependency_stubs():
+    dotenv = module_types.ModuleType("dotenv")
+    dotenv.load_dotenv = lambda: None
+    sys.modules["dotenv"] = dotenv
+
+    google = module_types.ModuleType("google")
+    genai = module_types.ModuleType("google.genai")
+    genai_types = module_types.ModuleType("google.genai.types")
+    genai.Client = object
+    genai.types = genai_types
+    google.genai = genai
+    sys.modules["google"] = google
+    sys.modules["google.genai"] = genai
+    sys.modules["google.genai.types"] = genai_types
+
+    langgraph = module_types.ModuleType("langgraph")
+    graph = module_types.ModuleType("langgraph.graph")
+    graph.END = "__end__"
+
+    class FakeStateGraph:
+        def __init__(self, state_type):
+            self.state_type = state_type
+
+        def add_node(self, *args, **kwargs):
+            pass
+
+        def add_edge(self, *args, **kwargs):
+            pass
+
+        def add_conditional_edges(self, *args, **kwargs):
+            pass
+
+        def set_entry_point(self, *args, **kwargs):
+            pass
+
+        def compile(self):
+            return self
+
+    graph.StateGraph = FakeStateGraph
+    langgraph.graph = graph
+    sys.modules["langgraph"] = langgraph
+    sys.modules["langgraph.graph"] = graph
+
+    fpdf = module_types.ModuleType("fpdf")
+    fpdf.FPDF = object
+    sys.modules["fpdf"] = fpdf
+
+
+_install_dependency_stubs()
 
 import orchestrator
 from ui.pdf_export import build_pdf_bytes
