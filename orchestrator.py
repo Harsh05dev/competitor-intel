@@ -27,6 +27,8 @@ Usage:
     result = run_analysis("Stripe", "fintech")
 """
 
+from typing import Optional
+
 from langgraph.graph import StateGraph, END
 
 from models.schemas import AgentState
@@ -43,20 +45,29 @@ _analyst     = None
 _evaluator   = None
 
 
-def _get_agents():
+def _get_agents(api_key: Optional[str] = None):
+    if api_key is not None:
+        return (
+            ResearcherAgent(api_key=api_key),
+            CategorizerAgent(api_key=api_key),
+            AnalystAgent(api_key=api_key),
+            EvaluatorAgent(api_key=api_key),
+        )
+
     global _researcher, _categorizer, _analyst, _evaluator
     if _researcher is None:
         _researcher = ResearcherAgent()
         _categorizer = CategorizerAgent()
         _analyst = AnalystAgent()
         _evaluator = EvaluatorAgent()
+    return _researcher, _categorizer, _analyst, _evaluator
 
 
 # ── NODE FUNCTIONS ─────────────────────────────────────────────────────────────
 # Each node takes the full AgentState and returns a dict of updated fields.
 # LangGraph merges the returned dict into the existing state automatically.
 
-def researcher_node(state: AgentState) -> dict:
+def _researcher_node(state: AgentState, researcher: ResearcherAgent) -> dict:
     """
     Node 1 — Researcher
     Round 1: broad search to find competitors.
@@ -73,7 +84,7 @@ def researcher_node(state: AgentState) -> dict:
             },
         }
     print(f"\n[Graph] → researcher_node (iteration {state['iteration']})")
-    result = _researcher.research(state)
+    result = researcher.research(state)
     log_entry = f"[Iter {state['iteration']}] Researcher: found {len(result.get('research_results', []))} competitors"
     return {
         **result,
@@ -82,14 +93,19 @@ def researcher_node(state: AgentState) -> dict:
     }
 
 
-def categorizer_node(state: AgentState) -> dict:
+def researcher_node(state: AgentState) -> dict:
+    _get_agents()
+    return _researcher_node(state, _researcher)
+
+
+def _categorizer_node(state: AgentState, categorizer: CategorizerAgent) -> dict:
     """
     Node 2 — Categorizer
     Transforms raw snippets into structured JSON per competitor.
     On iteration 2+, merges new data with existing data (fills gaps only).
     """
     print(f"\n[Graph] → categorizer_node (iteration {state['iteration']})")
-    result = _categorizer.categorize(state)
+    result = categorizer.categorize(state)
     log_entry = f"[Iter {state['iteration']}] Categorizer: structured {len(result.get('categorized_competitors', []))} competitors"
     return {
         **result,
@@ -98,14 +114,19 @@ def categorizer_node(state: AgentState) -> dict:
     }
 
 
-def analyst_node(state: AgentState) -> dict:
+def categorizer_node(state: AgentState) -> dict:
+    _get_agents()
+    return _categorizer_node(state, _categorizer)
+
+
+def _analyst_node(state: AgentState, analyst: AnalystAgent) -> dict:
     """
     Node 3 — Analyst
     Synthesizes structured competitor data into SWOT analysis,
     comparison matrix, threat ranking, and opportunity gaps.
     """
     print(f"\n[Graph] → analyst_node (iteration {state['iteration']})")
-    result = _analyst.analyze(state)
+    result = analyst.analyze(state)
     swot = result.get("analysis", {}).get("swot", {})
     total_points = sum(len(v) for v in swot.values() if isinstance(v, list))
     log_entry = f"[Iter {state['iteration']}] Analyst: generated SWOT with {total_points} points"
@@ -116,7 +137,12 @@ def analyst_node(state: AgentState) -> dict:
     }
 
 
-def evaluator_node(state: AgentState) -> dict:
+def analyst_node(state: AgentState) -> dict:
+    _get_agents()
+    return _analyst_node(state, _analyst)
+
+
+def _evaluator_node(state: AgentState, evaluator: EvaluatorAgent) -> dict:
     """
     Node 4 — Evaluator (the quality gate)
     Scores the current output 0-100 on 6 weighted criteria.
@@ -124,7 +150,7 @@ def evaluator_node(state: AgentState) -> dict:
     The score determines which path the conditional edge takes.
     """
     print(f"\n[Graph] → evaluator_node (iteration {state['iteration']})")
-    result = _evaluator.evaluate(state)
+    result = evaluator.evaluate(state)
     score  = result.get("evaluation", {}).get("score", 0)
     passed = result.get("evaluation", {}).get("passed", False)
     log_entry = f"[Iter {state['iteration']}] Evaluator: score={score}/100 {'PASSED ✓' if passed else 'FAILED ✗'}"
@@ -134,6 +160,11 @@ def evaluator_node(state: AgentState) -> dict:
         "status": "evaluated",
         "logs": state.get("logs", []) + [log_entry],
     }
+
+
+def evaluator_node(state: AgentState) -> dict:
+    _get_agents()
+    return _evaluator_node(state, _evaluator)
 
 
 def format_report_node(state: AgentState) -> dict:
@@ -232,7 +263,7 @@ def route_after_evaluation(state: AgentState) -> str:
 
 # ── GRAPH BUILDER ──────────────────────────────────────────────────────────────
 
-def build_graph():
+def build_graph(api_key: Optional[str] = None):
     """
     Constructs and compiles the LangGraph StateGraph.
 
@@ -240,14 +271,14 @@ def build_graph():
     Edges:    researcher→categorizer→analyst→evaluator (fixed, always)
     Cond edge: evaluator → {retry: researcher, finalize: format_report}
     """
-    _get_agents()
+    researcher, categorizer, analyst, evaluator = _get_agents(api_key=api_key)
     graph = StateGraph(AgentState)
 
     # ── Register nodes ─────────────────────────────────────────────────────────
-    graph.add_node("researcher",   researcher_node)
-    graph.add_node("categorizer",  categorizer_node)
-    graph.add_node("analyst",      analyst_node)
-    graph.add_node("evaluator",    evaluator_node)
+    graph.add_node("researcher",   lambda state: _researcher_node(state, researcher))
+    graph.add_node("categorizer",  lambda state: _categorizer_node(state, categorizer))
+    graph.add_node("analyst",      lambda state: _analyst_node(state, analyst))
+    graph.add_node("evaluator",    lambda state: _evaluator_node(state, evaluator))
     graph.add_node("format_report", format_report_node)
 
     # ── Fixed edges (always flow forward) ──────────────────────────────────────
@@ -278,12 +309,12 @@ def build_graph():
 
 # ── PUBLIC API ─────────────────────────────────────────────────────────────────
 
-def run_analysis(company: str, industry: str) -> AgentState:
+def run_analysis(company: str, industry: str, api_key: Optional[str] = None) -> AgentState:
     """
     Main entry point. Takes company + industry, returns the complete final state.
     Called by main.py Orchestrator wrapper and by ui/app.py indirectly.
     """
-    app = build_graph()
+    app = build_graph(api_key=api_key)
 
     initial_state: AgentState = {
         "target_company":          company,
