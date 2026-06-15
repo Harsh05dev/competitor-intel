@@ -14,6 +14,7 @@ You can also run this directly from the terminal:
 """
 
 import sys
+from typing import Optional
 from orchestrator import run_analysis
 
 
@@ -24,7 +25,10 @@ class Orchestrator:
     which does: from main import Orchestrator
     """
 
-    def run(self, company: str = "Stripe", industry: str = "fintech") -> dict:
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
+
+    def run(self, company: str = "Stripe", industry: str = "fintech", api_key: Optional[str] = None) -> dict:
         """
         Run the full LangGraph agentic pipeline and return the final state.
 
@@ -38,7 +42,7 @@ class Orchestrator:
           - logs: full execution trace
           - status: "complete"
         """
-        return run_analysis(company=company, industry=industry)
+        return run_analysis(company=company, industry=industry, api_key=api_key or self.api_key)
 
 
 if __name__ == "__main__":
