@@ -55,12 +55,16 @@ class ApiKeyIsolationTest(unittest.TestCase):
         graph_module.END = "__end__"
         langgraph_module.graph = graph_module
 
+        dotenv_module = types.ModuleType("dotenv")
+        dotenv_module.load_dotenv = lambda: None
+
         self.stubbed_modules = {
             "google": google_module,
             "google.genai": genai_module,
             "google.genai.types": genai_types_module,
             "langgraph": langgraph_module,
             "langgraph.graph": graph_module,
+            "dotenv": dotenv_module,
         }
         self.previous_modules = {name: sys.modules.get(name) for name in self.stubbed_modules}
         sys.modules.update(self.stubbed_modules)
