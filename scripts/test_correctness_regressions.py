@@ -39,7 +39,7 @@ class CorrectnessRegressionTests(unittest.TestCase):
 
         score = agent._calculate_score(breakdown)
 
-        self.assertEqual(score, 63)
+        self.assertEqual(score, 59)
 
     def test_researcher_retry_merge_skips_unnamed_entries(self):
         response = SimpleNamespace(
