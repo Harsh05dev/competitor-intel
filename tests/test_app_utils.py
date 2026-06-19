@@ -1,3 +1,4 @@
+import importlib.util
 import unittest
 
 from ui.app_utils import escape_html, pdf_safe_text, report_to_pdf_bytes
@@ -14,6 +15,7 @@ class AppUtilsTest(unittest.TestCase):
         long_line = "A" * 250
         self.assertEqual(pdf_safe_text(long_line), long_line)
 
+    @unittest.skipIf(importlib.util.find_spec("fpdf") is None, "fpdf is not installed")
     def test_report_to_pdf_bytes_returns_pdf(self):
         pdf_bytes = report_to_pdf_bytes("# Report\n" + ("A" * 250))
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
