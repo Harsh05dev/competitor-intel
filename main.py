@@ -14,6 +14,8 @@ You can also run this directly from the terminal:
 """
 
 import sys
+from typing import Optional
+
 from orchestrator import run_analysis
 
 
@@ -23,6 +25,9 @@ class Orchestrator:
     Exists solely to maintain backward compatibility with ui/app.py
     which does: from main import Orchestrator
     """
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
 
     def run(self, company: str = "Stripe", industry: str = "fintech") -> dict:
         """
@@ -38,7 +43,7 @@ class Orchestrator:
           - logs: full execution trace
           - status: "complete"
         """
-        return run_analysis(company=company, industry=industry)
+        return run_analysis(company=company, industry=industry, api_key=self.api_key)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ from google.genai import types
 
 from models.schemas import AgentState
 import config
+from runtime_context import get_gemini_api_key
 
 load_dotenv()
 
@@ -69,6 +70,9 @@ class EvaluatorAgent:
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
+        api_key = get_gemini_api_key()
+        if api_key:
+            return genai.Client(api_key=api_key)
         if self.client is None:
             api_key = os.getenv("GEMINI_API_KEY", "")
             if not api_key:
