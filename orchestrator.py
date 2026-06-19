@@ -27,6 +27,8 @@ Usage:
     result = run_analysis("Stripe", "fintech")
 """
 
+from typing import Optional
+
 from langgraph.graph import StateGraph, END
 
 from models.schemas import AgentState
@@ -35,6 +37,7 @@ from agents.categorizer import CategorizerAgent
 from agents.analyst import AnalystAgent
 from agents.evaluator import EvaluatorAgent
 import config
+from runtime_context import gemini_api_key
 
 # ── Lazy agent singletons (avoid import-time Gemini client / Streamlit crash) ─
 _researcher  = None
@@ -278,36 +281,41 @@ def build_graph():
 
 # ── PUBLIC API ─────────────────────────────────────────────────────────────────
 
-def run_analysis(company: str, industry: str) -> AgentState:
+def run_analysis(company: str, industry: str, api_key: Optional[str] = None) -> AgentState:
     """
     Main entry point. Takes company + industry, returns the complete final state.
     Called by main.py Orchestrator wrapper and by ui/app.py indirectly.
     """
-    app = build_graph()
+    token = gemini_api_key.set(api_key) if api_key else None
+    try:
+        app = build_graph()
 
-    initial_state: AgentState = {
-        "target_company":          company,
-        "industry":                industry,
-        "iteration":               0,
-        "research_results":        [],
-        "categorized_competitors": [],
-        "analysis":                {},
-        "evaluation":              {},
-        "final_output":            "",
-        "status":                  "initialized",
-        "logs":                    [],
-    }
+        initial_state: AgentState = {
+            "target_company":          company,
+            "industry":                industry,
+            "iteration":               0,
+            "research_results":        [],
+            "categorized_competitors": [],
+            "analysis":                {},
+            "evaluation":              {},
+            "final_output":            "",
+            "status":                  "initialized",
+            "logs":                    [],
+        }
 
-    print(f"\n{'='*55}")
-    print(f"  Competitor Intelligence — LangGraph Orchestrator")
-    print(f"  Target: {company} | Industry: {industry}")
-    print(f"{'='*55}")
+        print(f"\n{'='*55}")
+        print(f"  Competitor Intelligence — LangGraph Orchestrator")
+        print(f"  Target: {company} | Industry: {industry}")
+        print(f"{'='*55}")
 
-    result = app.invoke(initial_state)
+        result = app.invoke(initial_state)
 
-    print(f"\n{'='*55}")
-    print(f"  COMPLETE | Score: {result['evaluation'].get('score', 0)}/100")
-    print(f"  Iterations: {result['iteration']} | Status: {result['status']}")
-    print(f"{'='*55}\n")
+        print(f"\n{'='*55}")
+        print(f"  COMPLETE | Score: {result['evaluation'].get('score', 0)}/100")
+        print(f"  Iterations: {result['iteration']} | Status: {result['status']}")
+        print(f"{'='*55}\n")
 
-    return result
+        return result
+    finally:
+        if token is not None:
+            gemini_api_key.reset(token)
