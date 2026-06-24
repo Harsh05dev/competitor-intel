@@ -14,7 +14,7 @@ Round 2+ (iteration > 0): targeted research — use the Evaluator's
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -51,15 +51,18 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
+        self._client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if not api_key:
-                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        api_key = self.api_key if self.api_key is not None else os.getenv("GEMINI_API_KEY", "")
+        if not api_key:
+            raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        if self.client is None or self._client_api_key != api_key:
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     def research(self, state: AgentState) -> Dict[str, Any]:
@@ -128,6 +131,12 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
+            if iteration > 0 and state.get("research_results"):
+                print("  [Researcher] All models failed — preserving existing research")
+                return {
+                    "research_results": state["research_results"],
+                    "iteration": iteration,
+                }
             print("  [Researcher] All models failed — returning empty results")
             return {
                 "research_results": [],
@@ -140,17 +149,7 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
-            for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
-                if key in existing:
-                    # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
-                    existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
-                else:
-                    existing[key] = new_comp
-            data = list(existing.values())
+            data = self._merge_research_results(state["research_results"], data)
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
@@ -177,3 +176,66 @@ class ResearcherAgent:
         except json.JSONDecodeError as e:
             print(f"  [Researcher] JSON parse error: {e}")
             return []
+
+    def _merge_research_results(self, existing_results: List[dict], new_results: List[dict]) -> List[dict]:
+        """Merge retry results without assuming every LLM row is perfectly shaped."""
+        merged = []
+        by_name = {}
+
+        for comp in existing_results:
+            normalized = self._normalize_research_result(comp)
+            if normalized is None:
+                continue
+            name = normalized.get("company_name", "")
+            if name:
+                key = name.lower()
+                if key in by_name:
+                    self._append_research_fields(by_name[key], normalized)
+                    continue
+                by_name[key] = normalized
+            merged.append(normalized)
+
+        for comp in new_results:
+            normalized = self._normalize_research_result(comp)
+            if normalized is None:
+                continue
+            name = normalized.get("company_name", "")
+            if name and name.lower() in by_name:
+                self._append_research_fields(by_name[name.lower()], normalized)
+            else:
+                if name:
+                    by_name[name.lower()] = normalized
+                merged.append(normalized)
+
+        return merged
+
+    def _normalize_research_result(self, comp: Any) -> dict | None:
+        if not isinstance(comp, dict):
+            return None
+        normalized = dict(comp)
+        normalized["company_name"] = str(normalized.get("company_name") or "").strip()
+        normalized["raw_snippets"] = self._as_list(normalized.get("raw_snippets"))
+        normalized["sources"] = self._as_list(normalized.get("sources"))
+        return normalized
+
+    def _append_research_fields(self, target: dict, incoming: dict) -> None:
+        target["raw_snippets"] = self._dedupe(target.get("raw_snippets", []) + incoming.get("raw_snippets", []))
+        target["sources"] = self._dedupe(target.get("sources", []) + incoming.get("sources", []))
+
+    def _as_list(self, value: Any) -> list:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        return [value]
+
+    def _dedupe(self, values: list) -> list:
+        deduped = []
+        seen = set()
+        for value in values:
+            marker = repr(value)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            deduped.append(value)
+        return deduped

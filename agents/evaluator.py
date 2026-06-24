@@ -65,15 +65,18 @@ Return ONLY the JSON object, no other text."""
 
 
 class EvaluatorAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
+        self._client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if not api_key:
-                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        api_key = self.api_key if self.api_key is not None else os.getenv("GEMINI_API_KEY", "")
+        if not api_key:
+            raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        if self.client is None or self._client_api_key != api_key:
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     def evaluate(self, state: AgentState) -> Dict[str, Any]:
@@ -180,8 +183,16 @@ class EvaluatorAgent:
                 raw_score = criterion_data.get("score", 5)
             else:
                 raw_score = 5  # default if parsing was off
+            raw_score = self._coerce_score(raw_score)
             total += (raw_score / 10) * weight
         return int(total)
+
+    def _coerce_score(self, raw_score: Any) -> float:
+        try:
+            score = float(raw_score)
+        except (TypeError, ValueError):
+            score = 5.0
+        return max(0.0, min(10.0, score))
 
     def _parse_json_object(self, text: str) -> dict:
         """Extract JSON object from LLM response."""

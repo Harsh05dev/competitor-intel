@@ -57,15 +57,18 @@ Rules:
 
 
 class AnalystAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
+        self._client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if not api_key:
-                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        api_key = self.api_key if self.api_key is not None else os.getenv("GEMINI_API_KEY", "")
+        if not api_key:
+            raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        if self.client is None or self._client_api_key != api_key:
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     def analyze(self, state: AgentState) -> Dict[str, Any]:
@@ -127,10 +130,16 @@ class AnalystAgent:
                 print(f"  [Analyst] {model} failed: {e}")
 
         if not response:
+            if state.get("iteration", 0) > 0 and state.get("analysis"):
+                print("  [Analyst] All models failed — preserving existing analysis")
+                return {"analysis": state["analysis"]}
             print("  [Analyst] All models failed — returning empty analysis")
             return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
 
         analysis = self._parse_json_object(response.text or "")
+        if not analysis and state.get("iteration", 0) > 0 and state.get("analysis"):
+            print("  [Analyst] Parsed empty analysis on retry — preserving existing analysis")
+            return {"analysis": state["analysis"]}
 
         # Log SWOT depth for visibility
         swot = analysis.get("swot", {})
