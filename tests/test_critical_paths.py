@@ -6,6 +6,13 @@ import unittest
 
 def _install_optional_dependency_stubs():
     try:
+        import dotenv  # noqa: F401
+    except Exception:
+        dotenv_module = types.ModuleType("dotenv")
+        dotenv_module.load_dotenv = lambda *args, **kwargs: None
+        sys.modules["dotenv"] = dotenv_module
+
+    try:
         import google.genai  # noqa: F401
     except Exception:
         google_module = sys.modules.setdefault("google", types.ModuleType("google"))
