@@ -14,7 +14,7 @@ Round 2+ (iteration > 0): targeted research — use the Evaluator's
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -51,12 +51,13 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -128,6 +129,13 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
+            existing_results = state.get("research_results", [])
+            if iteration > 0 and existing_results:
+                print("  [Researcher] All models failed — preserving existing research results")
+                return {
+                    "research_results": existing_results,
+                    "iteration": iteration,
+                }
             print("  [Researcher] All models failed — returning empty results")
             return {
                 "research_results": [],
@@ -136,13 +144,16 @@ class ResearcherAgent:
 
         # ── Parse JSON response ────────────────────────────────────────────────
         text = response.text or ""
-        data = self._parse_json_list(text)
+        data = self._normalize_results(self._parse_json_list(text))
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
+            existing = {
+                r["company_name"].lower(): r
+                for r in self._normalize_results(state["research_results"])
+            }
             for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
+                key = new_comp["company_name"].lower()
                 if key in existing:
                     # Append new snippets to existing ones, deduplicate
                     combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
@@ -157,6 +168,32 @@ class ResearcherAgent:
             "research_results": data,
             "iteration": iteration,
         }
+
+    def _normalize_results(self, data: Any) -> list:
+        """Keep only merge-safe research entries from model output."""
+        if not isinstance(data, list):
+            return []
+
+        normalized = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("company_name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            normalized.append({
+                "company_name": name.strip(),
+                "raw_snippets": self._coerce_string_list(item.get("raw_snippets", [])),
+                "sources": self._coerce_string_list(item.get("sources", [])),
+            })
+        return normalized
+
+    def _coerce_string_list(self, value: Any) -> list:
+        if isinstance(value, list):
+            return [str(v) for v in value if v is not None]
+        if value is None:
+            return []
+        return [str(value)]
 
     def _parse_json_list(self, text: str) -> list:
         """Extract a JSON array from LLM response, handling markdown fences."""
