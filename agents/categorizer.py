@@ -16,7 +16,7 @@ overwrites existing good data.
 
 import os
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -51,12 +51,13 @@ Rules:
 
 
 class CategorizerAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -118,7 +119,7 @@ class CategorizerAgent:
             print("  [Categorizer] All models failed — returning existing data")
             return {"categorized_competitors": existing}
 
-        new_data = self._parse_json_list(response.text or "")
+        new_data = self._normalize_competitors(self._parse_json_list(response.text or ""))
 
         # On iteration 2+, merge with existing rather than replacing
         if iteration > 0 and existing:
@@ -138,11 +139,13 @@ class CategorizerAgent:
         - New competitors found in re-research: append
         Never overwrites existing data.
         """
-        new_map = {c.get("company_name", "").lower(): c for c in new_data}
+        existing = self._normalize_competitors(existing)
+        new_data = self._normalize_competitors(new_data)
+        new_map = {c["company_name"].lower(): c for c in new_data}
         merged  = []
 
         for comp in existing:
-            key     = comp.get("company_name", "").lower()
+            key     = comp["company_name"].lower()
             new_comp = new_map.get(key, {})
 
             # Fill string fields only if missing
@@ -154,18 +157,56 @@ class CategorizerAgent:
             for field in ["key_features", "hiring_signals", "recent_news"]:
                 existing_list = comp.get(field) or []
                 new_list      = new_comp.get(field) or []
-                combined      = existing_list + new_list
+                combined      = self._coerce_string_list(existing_list) + self._coerce_string_list(new_list)
                 comp[field]   = list(dict.fromkeys(combined))  # preserves order
 
             merged.append(comp)
 
         # Append any completely new competitors
-        existing_keys = {c.get("company_name", "").lower() for c in existing}
+        existing_keys = {c["company_name"].lower() for c in existing}
         for name_key, comp in new_map.items():
             if name_key not in existing_keys:
                 merged.append(comp)
 
         return merged
+
+    def _normalize_competitors(self, data: Any) -> List[dict]:
+        """Keep competitor entries in a shape safe for prompts and retry merges."""
+        if not isinstance(data, list):
+            return []
+
+        normalized = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("company_name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            normalized.append({
+                "company_name": name.strip(),
+                "pricing": self._coerce_optional_string(item.get("pricing")),
+                "key_features": self._coerce_string_list(item.get("key_features", [])),
+                "target_audience": self._coerce_optional_string(item.get("target_audience")),
+                "funding": self._coerce_optional_string(item.get("funding")),
+                "hiring_signals": self._coerce_string_list(item.get("hiring_signals", [])),
+                "recent_news": self._coerce_string_list(item.get("recent_news", [])),
+                "customer_sentiment": self._coerce_optional_string(item.get("customer_sentiment")),
+            })
+        return normalized
+
+    def _coerce_optional_string(self, value: Any):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        return str(value)
+
+    def _coerce_string_list(self, value: Any) -> List[str]:
+        if isinstance(value, list):
+            return [str(v) for v in value if v is not None]
+        if value is None:
+            return []
+        return [str(value)]
 
     def _parse_json_list(self, text: str) -> list:
         """Extract JSON array from LLM response."""

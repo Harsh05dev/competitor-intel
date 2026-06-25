@@ -10,7 +10,7 @@ This is where organized data becomes actionable intelligence.
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -57,12 +57,13 @@ Rules:
 
 
 class AnalystAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -130,7 +131,7 @@ class AnalystAgent:
             print("  [Analyst] All models failed — returning empty analysis")
             return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
 
-        analysis = self._parse_json_object(response.text or "")
+        analysis = self._normalize_analysis(self._parse_json_object(response.text or ""))
 
         # Log SWOT depth for visibility
         swot = analysis.get("swot", {})
@@ -139,6 +140,50 @@ class AnalystAgent:
             print(f"  [Analyst] {quadrant}: {count} points")
 
         return {"analysis": analysis}
+
+    def _normalize_analysis(self, data: Any) -> dict:
+        if not isinstance(data, dict):
+            return {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}
+
+        raw_swot = data.get("swot", {})
+        swot = {}
+        if isinstance(raw_swot, dict):
+            for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
+                swot[quadrant] = self._coerce_string_list(raw_swot.get(quadrant, []))
+
+        matrix = []
+        raw_matrix = data.get("comparison_matrix", [])
+        if isinstance(raw_matrix, list):
+            for row in raw_matrix:
+                if not isinstance(row, dict):
+                    continue
+                matrix.append({
+                    "company_name": self._coerce_string(row.get("company_name"), "?"),
+                    "pricing_tier": self._coerce_string(row.get("pricing_tier"), "?"),
+                    "primary_strength": self._coerce_string(row.get("primary_strength"), "?"),
+                    "primary_weakness": self._coerce_string(row.get("primary_weakness"), "?"),
+                    "target_market": self._coerce_string(row.get("target_market"), "?"),
+                    "threat_level": self._coerce_string(row.get("threat_level"), "Low"),
+                })
+
+        return {
+            "swot": swot,
+            "comparison_matrix": matrix,
+            "threat_ranking": self._coerce_string_list(data.get("threat_ranking", [])),
+            "opportunity_gaps": self._coerce_string_list(data.get("opportunity_gaps", [])),
+        }
+
+    def _coerce_string(self, value: Any, default: str = "") -> str:
+        if value is None:
+            return default
+        return str(value)
+
+    def _coerce_string_list(self, value: Any) -> list:
+        if isinstance(value, list):
+            return [str(v) for v in value if v is not None]
+        if value is None:
+            return []
+        return [str(value)]
 
     def _parse_json_object(self, text: str) -> dict:
         """Extract JSON object from LLM response."""
