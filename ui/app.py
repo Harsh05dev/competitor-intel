@@ -9,6 +9,8 @@ import sys, os, time
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from ui.report_pdf import write_report_lines
+
 st.set_page_config(
     page_title="Competitor Intel",
     page_icon="⚡",
@@ -644,22 +646,7 @@ def run_live_mode(company, industry):
     slot.empty(); bar.empty()
     return result
 
-# ── Run ─────────────────────────────────────────────────────────────────────────
-if run_btn:
-    if not company_final or not company_final.strip():
-        st.error("Please select or enter a company name."); st.stop()
-    if not industry_final or not industry_final.strip():
-        st.error("Industry is required."); st.stop()
-    if DEMO:
-        result = run_demo_mode(company_final, industry_final)
-    else:
-        if not os.environ.get("GEMINI_API_KEY", ""):
-            st.error("Paste your Gemini API key in the sidebar first."); st.stop()
-        try:
-            result = run_live_mode(company_final, industry_final)
-        except Exception as e:
-            st.error(f"Pipeline error: {e}"); st.stop()
-
+def render_result(result):
     ev = result.get("evaluation", {})
     render_metrics(ev.get("score",0), ev.get("passed",False), result.get("research_results",[]), result.get("iteration",1))
 
@@ -686,22 +673,40 @@ if run_btn:
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Helvetica", size=10)
-            for raw_line in report_md.split("\n"):
-                safe = raw_line.encode("latin-1", "replace").decode("latin-1")[:200]
-                if safe.strip():
-                    pdf.set_x(pdf.l_margin)
-                    pdf.multi_cell(pdf.epw, 5, text=safe)
-                else:
-                    pdf.ln(4)
+            write_report_lines(pdf, report_md)
             pdf_bytes = bytes(pdf.output())
+            report_company = result.get("target_company", company_final)
             st.download_button(
                 "⬇ Download PDF Report",
                 data=pdf_bytes,
-                file_name=f"{company_final}_competitor_report.pdf",
+                file_name=f"{report_company}_competitor_report.pdf",
                 mime="application/pdf",
             )
     except Exception:
         pass
+
+
+# ── Run ─────────────────────────────────────────────────────────────────────────
+result_to_render = st.session_state.get("last_result")
+
+if run_btn:
+    if not company_final or not company_final.strip():
+        st.error("Please select or enter a company name."); st.stop()
+    if not industry_final or not industry_final.strip():
+        st.error("Industry is required."); st.stop()
+    if DEMO:
+        result_to_render = run_demo_mode(company_final, industry_final)
+    else:
+        if not os.environ.get("GEMINI_API_KEY", ""):
+            st.error("Paste your Gemini API key in the sidebar first."); st.stop()
+        try:
+            result_to_render = run_live_mode(company_final, industry_final)
+        except Exception as e:
+            st.error(f"Pipeline error: {e}"); st.stop()
+    st.session_state.last_result = result_to_render
+
+if result_to_render:
+    render_result(result_to_render)
 else:
     st.markdown(f'<div style="margin-top:5rem;text-align:center;padding:2rem;"><div style="font-size:2.2rem;margin-bottom:1rem;opacity:0.1;">⚡</div><div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{TEXT4};letter-spacing:0.25em;text-transform:uppercase;margin-bottom:0.5rem;">System Ready</div><div style="font-family:Space Mono,monospace;font-size:0.76rem;color:{TEXT3};margin-bottom:0.35rem;">Select a company → click ▶ RUN</div><div style="font-size:0.72rem;color:{TEXT4};">{"Demo mode active — no API key needed" if DEMO else "Live mode — paste your Gemini key in the sidebar"}</div></div>', unsafe_allow_html=True)
 
