@@ -197,6 +197,45 @@ class CriticalPathTests(unittest.TestCase):
         }
         self.assertEqual(evaluator._calculate_score(invalid_scores), 50)
 
+    def test_categorizer_merge_skips_null_company_names(self):
+        agent = CategorizerAgent(api_key="unused")
+        merged = agent._merge(
+            existing=[
+                {"company_name": "Square", "pricing": "2.6%", "key_features": ["POS"]},
+                {"company_name": None, "pricing": "unknown", "key_features": []},
+            ],
+            new_data=[
+                {"company_name": None, "pricing": "should not crash"},
+                {"company_name": "Adyen", "pricing": "IC++", "key_features": ["Enterprise"]},
+                "not-a-dict",
+            ],
+        )
+        names = [c.get("company_name") for c in merged]
+        self.assertIn("Square", names)
+        self.assertIn("Adyen", names)
+        square = next(c for c in merged if c.get("company_name") == "Square")
+        self.assertEqual(square["pricing"], "2.6%")
+
+    def test_evaluator_prompt_build_survives_null_swot(self):
+        class DummyModels:
+            def generate_content(self, *args, **kwargs):
+                return types.SimpleNamespace(
+                    text='{"breakdown": {}, "gaps": [], "suggested_queries": []}'
+                )
+
+        agent = EvaluatorAgent(api_key="unused")
+        agent._get_client = lambda: types.SimpleNamespace(models=DummyModels())
+
+        with patch("agents.evaluator.types.GenerateContentConfig", return_value=object()):
+            result = agent.evaluate({
+                "target_company": "Stripe",
+                "categorized_competitors": [{"company_name": "Square", "key_features": None}],
+                "analysis": {"swot": None, "threat_ranking": None, "opportunity_gaps": None},
+            })
+
+        self.assertIn("evaluation", result)
+        self.assertIn("score", result["evaluation"])
+
 
 if __name__ == "__main__":
     unittest.main()

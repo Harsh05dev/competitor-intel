@@ -104,7 +104,10 @@ def analyst_node(state: AgentState, agent: AnalystAgent) -> dict:
     """
     print(f"\n[Graph] → analyst_node (iteration {state['iteration']})")
     result = agent.analyze(state)
-    swot = result.get("analysis", {}).get("swot", {})
+    analysis = result.get("analysis") or {}
+    swot = analysis.get("swot") if isinstance(analysis, dict) else {}
+    if not isinstance(swot, dict):
+        swot = {}
     total_points = sum(len(v) for v in swot.values() if isinstance(v, list))
     log_entry = f"[Iter {state['iteration']}] Analyst: generated SWOT with {total_points} points"
     return {
@@ -141,11 +144,13 @@ def format_report_node(state: AgentState) -> dict:
     No LLM call needed here — just assembles the report from existing state.
     """
     print(f"\n[Graph] → format_report_node")
-    ev    = state.get("evaluation", {})
+    ev    = state.get("evaluation") or {}
     score = ev.get("score", 0)
-    comps = state.get("categorized_competitors", []) or state.get("research_results", [])
-    analysis = state.get("analysis", {})
-    swot  = analysis.get("swot", {})
+    comps = state.get("categorized_competitors") or state.get("research_results") or []
+    analysis = state.get("analysis") or {}
+    swot  = analysis.get("swot") or {}
+    if not isinstance(swot, dict):
+        swot = {}
     iters = state["iteration"]
     conf  = "HIGH" if score >= config.EVALUATION_THRESHOLD else "MEDIUM" if score >= 50 else "LOW"
 
@@ -159,7 +164,7 @@ def format_report_node(state: AgentState) -> dict:
     if swot:
         lines.append("## SWOT Analysis")
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            items = swot.get(quadrant, [])
+            items = swot.get(quadrant) or []
             if items:
                 lines.append(f"\n### {quadrant.title()}")
                 for item in items:
