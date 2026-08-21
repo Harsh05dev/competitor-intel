@@ -141,11 +141,19 @@ class CategorizerAgent:
         - New competitors found in re-research: append
         Never overwrites existing data.
         """
-        new_map = {c.get("company_name", "").lower(): c for c in new_data}
+        new_map = {}
+        for c in new_data:
+            if not isinstance(c, dict):
+                continue
+            key = (c.get("company_name") or "").lower()
+            if key:
+                new_map[key] = c
         merged  = []
 
         for comp in existing:
-            key     = comp.get("company_name", "").lower()
+            if not isinstance(comp, dict):
+                continue
+            key     = (comp.get("company_name") or "").lower()
             new_comp = new_map.get(key, {})
 
             # Fill string fields only if missing
@@ -163,7 +171,11 @@ class CategorizerAgent:
             merged.append(comp)
 
         # Append any completely new competitors
-        existing_keys = {c.get("company_name", "").lower() for c in existing}
+        existing_keys = {
+            (c.get("company_name") or "").lower()
+            for c in existing
+            if isinstance(c, dict) and (c.get("company_name") or "").lower()
+        }
         for name_key, comp in new_map.items():
             if name_key not in existing_keys:
                 merged.append(comp)

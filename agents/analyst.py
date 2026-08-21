@@ -144,9 +144,10 @@ class AnalystAgent:
             return {"analysis": prior_analysis}
 
         # Log SWOT depth for visibility
-        swot = analysis.get("swot", {})
+        swot = analysis.get("swot") or {}
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            count = len(swot.get(quadrant, []))
+            items = swot.get(quadrant) if isinstance(swot, dict) else []
+            count = len(items) if isinstance(items, list) else 0
             print(f"  [Analyst] {quadrant}: {count} points")
 
         return {"analysis": analysis}

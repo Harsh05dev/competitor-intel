@@ -81,8 +81,8 @@ class EvaluatorAgent:
 
     def evaluate(self, state: AgentState) -> Dict[str, Any]:
         target      = state.get("target_company", "Unknown")
-        competitors = state.get("categorized_competitors", [])
-        analysis    = state.get("analysis", {})
+        competitors = state.get("categorized_competitors") or []
+        analysis    = state.get("analysis") or {}
 
         print(f"  [Evaluator] Scoring intelligence report for {target}")
 
@@ -102,10 +102,14 @@ class EvaluatorAgent:
             prompt += f"- News: {', '.join(news[:2]) if news else 'MISSING'}\n"
             prompt += f"- Sentiment: {comp.get('customer_sentiment') or 'MISSING'}\n"
 
-        swot = analysis.get("swot", {})
+        swot = analysis.get("swot") or {}
+        if not isinstance(swot, dict):
+            swot = {}
         prompt += f"\n## SWOT Analysis:\n"
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            items = swot.get(quadrant, [])
+            items = swot.get(quadrant) or []
+            if not isinstance(items, list):
+                items = []
             prompt += f"- {quadrant.title()}: {len(items)} points\n"
             for item in items[:3]:
                 prompt += f"  • {item}\n"
