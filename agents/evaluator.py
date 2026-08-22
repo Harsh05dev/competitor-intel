@@ -91,15 +91,23 @@ class EvaluatorAgent:
         prompt += f"## Competitors Found ({len(competitors)}):\n"
 
         for comp in competitors:
-            prompt += f"\n### {comp.get('company_name', 'Unknown')}\n"
+            if not isinstance(comp, dict):
+                continue
+            prompt += f"\n### {comp.get('company_name') or 'Unknown'}\n"
             prompt += f"- Pricing: {comp.get('pricing') or 'MISSING'}\n"
             features = comp.get('key_features') or []
-            prompt += f"- Features: {', '.join(features) if features else 'MISSING'}\n"
+            if not isinstance(features, list):
+                features = []
+            prompt += f"- Features: {', '.join(str(f) for f in features) if features else 'MISSING'}\n"
             prompt += f"- Funding: {comp.get('funding') or 'MISSING'}\n"
             hiring = comp.get('hiring_signals') or []
-            prompt += f"- Hiring: {', '.join(hiring) if hiring else 'MISSING'}\n"
+            if not isinstance(hiring, list):
+                hiring = []
+            prompt += f"- Hiring: {', '.join(str(h) for h in hiring) if hiring else 'MISSING'}\n"
             news = comp.get('recent_news') or []
-            prompt += f"- News: {', '.join(news[:2]) if news else 'MISSING'}\n"
+            if not isinstance(news, list):
+                news = []
+            prompt += f"- News: {', '.join(str(n) for n in news[:2]) if news else 'MISSING'}\n"
             prompt += f"- Sentiment: {comp.get('customer_sentiment') or 'MISSING'}\n"
 
         swot = analysis.get("swot") or {}
@@ -164,7 +172,7 @@ class EvaluatorAgent:
             }
 
         # Calculate weighted score from breakdown
-        score = self._calculate_score(result.get("breakdown", {}))
+        score = self._calculate_score(result.get("breakdown") or {})
         result["score"]  = score
         result["passed"] = score >= config.EVALUATION_THRESHOLD
 
@@ -180,6 +188,8 @@ class EvaluatorAgent:
         Calculate weighted composite score from the 6-criteria breakdown.
         Each criterion is scored 0-10, then weighted by config.EVAL_WEIGHTS.
         """
+        if not isinstance(breakdown, dict):
+            breakdown = {}
         total = 0
         for criterion, weight in config.EVAL_WEIGHTS.items():
             criterion_data = breakdown.get(criterion, {})

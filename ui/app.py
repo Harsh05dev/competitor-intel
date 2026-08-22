@@ -463,6 +463,7 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    live_api_key = ""
     if not DEMO:
         st.markdown(f'<div style="{SIDE_LABEL}"><span style="{SIDE_LABEL_ICON}"></span>Gemini API Key</div>', unsafe_allow_html=True)
         live_api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed")
@@ -549,27 +550,40 @@ def render_metrics(score, passed, competitors, iterations):
 def render_competitors(competitors):
     st.markdown('<div class="sec-head">Competitor Data</div>', unsafe_allow_html=True)
     for c in competitors:
-        sh = "".join(f'<div class="snippet">· {_esc(s)}</div>' for s in c.get("raw_snippets", []))
-        sr = "".join(f'<div class="src">↗ {_esc(s)}</div>' for s in c.get("sources", [])[:2])
+        if not isinstance(c, dict):
+            continue
+        snippets = c.get("raw_snippets") or []
+        sources = c.get("sources") or []
+        if not isinstance(snippets, list):
+            snippets = []
+        if not isinstance(sources, list):
+            sources = []
+        sh = "".join(f'<div class="snippet">· {_esc(s)}</div>' for s in snippets)
+        sr = "".join(f'<div class="src">↗ {_esc(s)}</div>' for s in sources[:2])
         st.markdown(f'<div class="comp-card"><div class="comp-name"><span class="c-dot"></span>{_esc(c.get("company_name","?"))}</div>{sh}{sr}</div>', unsafe_allow_html=True)
 
 def render_swot(analysis):
-    swot = (analysis or {}).get("swot", {})
-    if not swot: return
+    swot = (analysis or {}).get("swot") or {}
+    if not isinstance(swot, dict) or not swot: return
     st.markdown('<div class="sec-head">SWOT Analysis</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     for i, (label, key, color) in enumerate([("Strengths 💪","strengths",ACCENT),("Weaknesses ⚠️","weaknesses",RED),("Opportunities 🚀","opportunities",BLUE),("Threats 🔴","threats",AMBER)]):
-        rows = "".join(f'<div style="font-size:0.8rem;color:{TEXT2};padding:0.25rem 0 0.25rem 0.7rem;border-left:2px solid {color}40;margin-bottom:0.25rem;line-height:1.45;">· {_esc(item)}</div>' for item in swot.get(key, []))
+        items = swot.get(key) or []
+        if not isinstance(items, list):
+            items = []
+        rows = "".join(f'<div style="font-size:0.8rem;color:{TEXT2};padding:0.25rem 0 0.25rem 0.7rem;border-left:2px solid {color}40;margin-bottom:0.25rem;line-height:1.45;">· {_esc(item)}</div>' for item in items)
         block = f'<div style="background:{BG2};border:1px solid {BORDER};border-radius:8px;padding:0.85rem 1rem;margin-bottom:0.65rem;"><div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{color};letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.55rem;">{label}</div>{rows}</div>'
         with (c1 if i % 2 == 0 else c2):
             st.markdown(block, unsafe_allow_html=True)
 
 def render_comparison(analysis):
-    matrix = (analysis or {}).get("comparison_matrix", [])
+    matrix = (analysis or {}).get("comparison_matrix") or []
     if not matrix: return
     st.markdown('<div class="sec-head">Comparison Matrix</div>', unsafe_allow_html=True)
     for row in matrix:
-        t = row.get("threat_level", "Low")
+        if not isinstance(row, dict):
+            continue
+        t = row.get("threat_level") or "Low"
         tc = RED if t == "High" else AMBER if t == "Medium" else TEXT3
         st.markdown(f'<div class="comp-card"><div class="comp-name"><span class="c-dot"></span>{_esc(row.get("company_name","?"))} <span style="font-family:Space Mono,monospace;font-size:0.57rem;color:{tc};margin-left:auto;">▲ {_esc(t.upper())} THREAT</span></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;font-size:0.8rem;color:{TEXT2};"><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">PRICING</span>{_esc(row.get("pricing_tier","?"))}</div><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">STRENGTH</span>{_esc(row.get("primary_strength","?"))}</div><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">MARKET</span>{_esc(row.get("target_market","?"))}</div></div></div>', unsafe_allow_html=True)
 
@@ -599,20 +613,23 @@ def _build_fallback_report_md(result: dict) -> str:
         "",
     ]
 
-    swot = (result.get("analysis") or {}).get("swot", {})
-    if swot:
+    swot = (result.get("analysis") or {}).get("swot") or {}
+    if isinstance(swot, dict) and swot:
         lines.append("## SWOT Analysis")
         for q in ["strengths", "weaknesses", "opportunities", "threats"]:
-            items = swot.get(q, [])
-            if items:
-                lines.append(f"\n### {q.title()}")
-                for item in items:
-                    lines.append(f"- {item}")
+            items = swot.get(q) or []
+            if not isinstance(items, list) or not items:
+                continue
+            lines.append(f"\n### {q.title()}")
+            for item in items:
+                lines.append(f"- {item}")
 
-    matrix = (result.get("analysis") or {}).get("comparison_matrix", [])
+    matrix = (result.get("analysis") or {}).get("comparison_matrix") or []
     if matrix:
         lines.append("\n## Competitor Comparison")
         for row in matrix:
+            if not isinstance(row, dict):
+                continue
             lines.append(
                 f"- {row.get('company_name','?')}: "
                 f"{row.get('pricing_tier','?')} | {row.get('primary_strength','?')} | "

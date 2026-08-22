@@ -177,6 +177,8 @@ def format_report_node(state: AgentState) -> dict:
         lines.append("| Company | Pricing | Strength | Weakness | Market | Threat |")
         lines.append("|---------|---------|----------|----------|--------|--------|")
         for row in matrix:
+            if not isinstance(row, dict):
+                continue
             lines.append(
                 f"| {row.get('company_name','?')} "
                 f"| {row.get('pricing_tier','?')} "
@@ -219,7 +221,7 @@ def route_after_evaluation(state: AgentState) -> str:
         "retry"    → go back to researcher_node for targeted re-research
         "finalize" → go to format_report_node and end
     """
-    score     = state.get("evaluation", {}).get("score", 0)
+        score     = (state.get("evaluation") or {}).get("score", 0)
     iteration = state.get("iteration", 0)
 
     if score >= config.EVALUATION_THRESHOLD:

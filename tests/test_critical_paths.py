@@ -196,6 +196,7 @@ class CriticalPathTests(unittest.TestCase):
             for criterion in config.EVAL_WEIGHTS
         }
         self.assertEqual(evaluator._calculate_score(invalid_scores), 50)
+        self.assertEqual(evaluator._calculate_score(None), 50)
 
     def test_categorizer_merge_skips_null_company_names(self):
         agent = CategorizerAgent(api_key="unused")
@@ -215,6 +216,26 @@ class CriticalPathTests(unittest.TestCase):
         self.assertIn("Adyen", names)
         square = next(c for c in merged if c.get("company_name") == "Square")
         self.assertEqual(square["pricing"], "2.6%")
+
+    def test_categorizer_prompt_build_survives_null_snippets(self):
+        class DummyModels:
+            def generate_content(self, *args, **kwargs):
+                return types.SimpleNamespace(text="[]")
+
+        agent = CategorizerAgent(api_key="unused")
+        agent._get_client = lambda: types.SimpleNamespace(models=DummyModels())
+
+        with patch("agents.categorizer.types.GenerateContentConfig", return_value=object()):
+            result = agent.categorize({
+                "iteration": 0,
+                "categorized_competitors": [],
+                "research_results": [
+                    {"company_name": "Square", "raw_snippets": None, "sources": None},
+                    "not-a-dict",
+                ],
+            })
+
+        self.assertEqual(result["categorized_competitors"], [])
 
     def test_evaluator_prompt_build_survives_null_swot(self):
         class DummyModels:

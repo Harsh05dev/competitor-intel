@@ -83,14 +83,20 @@ class CategorizerAgent:
         # Build prompt with all raw snippets
         prompt = "Organize the following raw research snippets into structured JSON:\n\n"
         for comp in research_results:
-            name     = comp.get("company_name", "Unknown")
-            snippets = comp.get("raw_snippets", [])
-            sources  = comp.get("sources", [])
+            if not isinstance(comp, dict):
+                continue
+            name     = comp.get("company_name") or "Unknown"
+            snippets = comp.get("raw_snippets") or []
+            sources  = comp.get("sources") or []
+            if not isinstance(snippets, list):
+                snippets = []
+            if not isinstance(sources, list):
+                sources = []
             prompt  += f"--- {name} ---\n"
             for s in snippets:
                 prompt += f"  • {s}\n"
             if sources:
-                prompt += f"  Sources: {', '.join(sources[:3])}\n"
+                prompt += f"  Sources: {', '.join(str(s) for s in sources[:3])}\n"
             prompt += "\n"
 
         # Try models

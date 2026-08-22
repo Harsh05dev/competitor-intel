@@ -89,16 +89,24 @@ class AnalystAgent:
         prompt += "Here is structured data on each competitor:\n\n"
 
         for comp in competitors:
-            prompt += f"### {comp.get('company_name', 'Unknown')}\n"
+            if not isinstance(comp, dict):
+                continue
+            prompt += f"### {comp.get('company_name') or 'Unknown'}\n"
             prompt += f"- Pricing: {comp.get('pricing') or 'Unknown'}\n"
             features = comp.get('key_features') or []
-            prompt += f"- Key Features: {', '.join(features) if features else 'Unknown'}\n"
+            if not isinstance(features, list):
+                features = []
+            prompt += f"- Key Features: {', '.join(str(f) for f in features) if features else 'Unknown'}\n"
             prompt += f"- Target Audience: {comp.get('target_audience') or 'Unknown'}\n"
             prompt += f"- Funding: {comp.get('funding') or 'Unknown'}\n"
             hiring = comp.get('hiring_signals') or []
-            prompt += f"- Hiring Signals: {', '.join(hiring) if hiring else 'None'}\n"
+            if not isinstance(hiring, list):
+                hiring = []
+            prompt += f"- Hiring Signals: {', '.join(str(h) for h in hiring) if hiring else 'None'}\n"
             news = comp.get('recent_news') or []
-            prompt += f"- Recent News: {', '.join(news[:2]) if news else 'None'}\n"
+            if not isinstance(news, list):
+                news = []
+            prompt += f"- Recent News: {', '.join(str(n) for n in news[:2]) if news else 'None'}\n"
             prompt += f"- Customer Sentiment: {comp.get('customer_sentiment') or 'Unknown'}\n\n"
 
         prompt += (
