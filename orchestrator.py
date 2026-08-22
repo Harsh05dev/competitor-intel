@@ -221,7 +221,7 @@ def route_after_evaluation(state: AgentState) -> str:
         "retry"    → go back to researcher_node for targeted re-research
         "finalize" → go to format_report_node and end
     """
-        score     = (state.get("evaluation") or {}).get("score", 0)
+    score     = (state.get("evaluation") or {}).get("score", 0)
     iteration = state.get("iteration", 0)
 
     if score >= config.EVALUATION_THRESHOLD:
