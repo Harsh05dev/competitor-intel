@@ -14,7 +14,7 @@ Round 2+ (iteration > 0): targeted research — use the Evaluator's
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -23,6 +23,18 @@ from models.schemas import AgentState
 import config
 
 load_dotenv()
+
+
+def _as_str_list(value) -> list:
+    """Coerce Gemini list-or-string fields without exploding strings into characters."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
 
 SYSTEM_PROMPT = """You are a competitive intelligence researcher. Your job is to find detailed,
 current information about companies and their competitors using web search.
@@ -51,22 +63,27 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
+        self._client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if not api_key:
-                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
+        if not api_key:
+            raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        if self.client is None or self._client_api_key != api_key:
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     def research(self, state: AgentState) -> Dict[str, Any]:
         company   = state.get("target_company", "")
         industry  = state.get("industry", "")
         iteration = state.get("iteration", 0)
-        queries   = state.get("evaluation", {}).get("suggested_queries", [])
+        queries   = (state.get("evaluation") or {}).get("suggested_queries") or []
+        if not isinstance(queries, list):
+            queries = []
 
         if iteration == 0:
             # ── Round 1: broad research ────────────────────────────────────────
@@ -128,9 +145,14 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
-            print("  [Researcher] All models failed — returning empty results")
+            prior_results = state.get("research_results", []) if iteration > 0 else []
+            print(
+                "  [Researcher] All models failed — preserving prior results"
+                if prior_results
+                else "  [Researcher] All models failed — returning empty results"
+            )
             return {
-                "research_results": [],
+                "research_results": prior_results,
                 "iteration": iteration,
             }
 
@@ -140,17 +162,41 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
+            existing = {}
+            unnamed_existing = []
+            for result in state["research_results"]:
+                if not isinstance(result, dict):
+                    continue
+                normalized = {
+                    **result,
+                    "raw_snippets": _as_str_list(result.get("raw_snippets")),
+                    "sources": _as_str_list(result.get("sources")),
+                }
+                key = (result.get("company_name") or "").lower()
+                if key:
+                    existing[key] = normalized
+                else:
+                    unnamed_existing.append(normalized)
             for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
+                if not isinstance(new_comp, dict):
+                    continue
+                key = (new_comp.get("company_name") or "").lower()
+                if not key:
+                    continue
+                new_snippets = _as_str_list(new_comp.get("raw_snippets"))
+                new_sources = _as_str_list(new_comp.get("sources"))
                 if key in existing:
                     # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
+                    combined = existing[key].get("raw_snippets", []) + new_snippets
                     existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
+                    existing[key]["sources"] = existing[key].get("sources", []) + new_sources
                 else:
-                    existing[key] = new_comp
-            data = list(existing.values())
+                    existing[key] = {
+                        **new_comp,
+                        "raw_snippets": new_snippets,
+                        "sources": new_sources,
+                    }
+            data = unnamed_existing + list(existing.values())
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
