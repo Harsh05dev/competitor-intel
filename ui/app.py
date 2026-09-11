@@ -3,6 +3,7 @@ Competitor Intelligence Dashboard — ui/app.py
 Clean rewrite: sidebar always accessible, native selectbox, demo/live toggle, theme toggle.
 """
 
+import html
 import streamlit as st
 import streamlit.components.v1 as components
 import sys, os, time
@@ -17,7 +18,12 @@ st.set_page_config(
 )
 
 # ── Session defaults ───────────────────────────────────────────────────────────
-for k, v in [("theme", "dark"), ("mode", "demo")]:
+for k, v in [
+    ("theme", "dark"),
+    ("mode", "demo"),
+    ("last_result", None),
+    ("last_run_company", ""),
+]:
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -49,6 +55,7 @@ if not st.session_state.get("_sidebar_session_opened"):
 
 DARK = st.session_state.theme == "dark"
 DEMO = st.session_state.mode  == "demo"
+live_api_key = ""
 
 # ── Colors ─────────────────────────────────────────────────────────────────────
 # Palette: Linear / Resend / Vercel inspired. Deep midnight w/ teal-mint accent.
@@ -456,11 +463,11 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    live_api_key = ""
     if not DEMO:
         st.markdown(f'<div style="{SIDE_LABEL}"><span style="{SIDE_LABEL_ICON}"></span>Gemini API Key</div>', unsafe_allow_html=True)
-        api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed")
-        if api_key:
-            os.environ["GEMINI_API_KEY"] = api_key
+        live_api_key = st.text_input("key", type="password", placeholder="paste key here", label_visibility="collapsed")
+        if live_api_key:
             st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{ACCENT};margin-top:0.35rem;">✓ key loaded</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div style="font-family:\'Space Mono\',monospace;font-size:0.62rem;font-weight:700;color:{AMBER};margin-top:0.35rem;">⚠ paste key to run</div>', unsafe_allow_html=True)
@@ -530,6 +537,10 @@ if not resolved_co:
 st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
 
 # ── Render functions ────────────────────────────────────────────────────────────
+def _esc(value) -> str:
+    return html.escape(str(value), quote=True)
+
+
 def render_metrics(score, passed, competitors, iterations):
     sc = "teal" if score >= 70 else "red"
     pc = "teal" if passed else "red"
@@ -539,39 +550,52 @@ def render_metrics(score, passed, competitors, iterations):
 def render_competitors(competitors):
     st.markdown('<div class="sec-head">Competitor Data</div>', unsafe_allow_html=True)
     for c in competitors:
-        sh = "".join(f'<div class="snippet">· {s}</div>' for s in c.get("raw_snippets", []))
-        sr = "".join(f'<div class="src">↗ {s}</div>' for s in c.get("sources", [])[:2])
-        st.markdown(f'<div class="comp-card"><div class="comp-name"><span class="c-dot"></span>{c.get("company_name","?")}</div>{sh}{sr}</div>', unsafe_allow_html=True)
+        if not isinstance(c, dict):
+            continue
+        snippets = c.get("raw_snippets") or []
+        sources = c.get("sources") or []
+        if not isinstance(snippets, list):
+            snippets = []
+        if not isinstance(sources, list):
+            sources = []
+        sh = "".join(f'<div class="snippet">· {_esc(s)}</div>' for s in snippets)
+        sr = "".join(f'<div class="src">↗ {_esc(s)}</div>' for s in sources[:2])
+        st.markdown(f'<div class="comp-card"><div class="comp-name"><span class="c-dot"></span>{_esc(c.get("company_name","?"))}</div>{sh}{sr}</div>', unsafe_allow_html=True)
 
 def render_swot(analysis):
-    swot = (analysis or {}).get("swot", {})
-    if not swot: return
+    swot = (analysis or {}).get("swot") or {}
+    if not isinstance(swot, dict) or not swot: return
     st.markdown('<div class="sec-head">SWOT Analysis</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     for i, (label, key, color) in enumerate([("Strengths 💪","strengths",ACCENT),("Weaknesses ⚠️","weaknesses",RED),("Opportunities 🚀","opportunities",BLUE),("Threats 🔴","threats",AMBER)]):
-        rows = "".join(f'<div style="font-size:0.8rem;color:{TEXT2};padding:0.25rem 0 0.25rem 0.7rem;border-left:2px solid {color}40;margin-bottom:0.25rem;line-height:1.45;">· {item}</div>' for item in swot.get(key, []))
-        html = f'<div style="background:{BG2};border:1px solid {BORDER};border-radius:8px;padding:0.85rem 1rem;margin-bottom:0.65rem;"><div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{color};letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.55rem;">{label}</div>{rows}</div>'
+        items = swot.get(key) or []
+        if not isinstance(items, list):
+            items = []
+        rows = "".join(f'<div style="font-size:0.8rem;color:{TEXT2};padding:0.25rem 0 0.25rem 0.7rem;border-left:2px solid {color}40;margin-bottom:0.25rem;line-height:1.45;">· {_esc(item)}</div>' for item in items)
+        block = f'<div style="background:{BG2};border:1px solid {BORDER};border-radius:8px;padding:0.85rem 1rem;margin-bottom:0.65rem;"><div style="font-family:Space Mono,monospace;font-size:0.6rem;color:{color};letter-spacing:0.1em;text-transform:uppercase;margin-bottom:0.55rem;">{label}</div>{rows}</div>'
         with (c1 if i % 2 == 0 else c2):
-            st.markdown(html, unsafe_allow_html=True)
+            st.markdown(block, unsafe_allow_html=True)
 
 def render_comparison(analysis):
-    matrix = (analysis or {}).get("comparison_matrix", [])
+    matrix = (analysis or {}).get("comparison_matrix") or []
     if not matrix: return
     st.markdown('<div class="sec-head">Comparison Matrix</div>', unsafe_allow_html=True)
     for row in matrix:
-        t = row.get("threat_level", "Low")
+        if not isinstance(row, dict):
+            continue
+        t = row.get("threat_level") or "Low"
         tc = RED if t == "High" else AMBER if t == "Medium" else TEXT3
-        st.markdown(f'<div class="comp-card"><div class="comp-name"><span class="c-dot"></span>{row.get("company_name","?")} <span style="font-family:Space Mono,monospace;font-size:0.57rem;color:{tc};margin-left:auto;">▲ {t.upper()} THREAT</span></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;font-size:0.8rem;color:{TEXT2};"><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">PRICING</span>{row.get("pricing_tier","?")}</div><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">STRENGTH</span>{row.get("primary_strength","?")}</div><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">MARKET</span>{row.get("target_market","?")}</div></div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="comp-card"><div class="comp-name"><span class="c-dot"></span>{_esc(row.get("company_name","?"))} <span style="font-family:Space Mono,monospace;font-size:0.57rem;color:{tc};margin-left:auto;">▲ {_esc(t.upper())} THREAT</span></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;font-size:0.8rem;color:{TEXT2};"><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">PRICING</span>{_esc(row.get("pricing_tier","?"))}</div><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">STRENGTH</span>{_esc(row.get("primary_strength","?"))}</div><div><span style="color:{TEXT3};font-size:0.58rem;font-family:Space Mono,monospace;display:block;margin-bottom:0.12rem;">MARKET</span>{_esc(row.get("target_market","?"))}</div></div></div>', unsafe_allow_html=True)
 
 def render_gaps(gaps, queries):
     gc, qc = st.columns(2)
     with gc:
         st.markdown('<div class="sec-head">Data Gaps</div>', unsafe_allow_html=True)
-        for g in (gaps or []): st.markdown(f'<div class="gap-row">⚠ {g}</div>', unsafe_allow_html=True)
+        for g in (gaps or []): st.markdown(f'<div class="gap-row">⚠ {_esc(g)}</div>', unsafe_allow_html=True)
         if not gaps: st.markdown(f'<div style="color:{TEXT3};font-size:0.82rem;">No gaps detected.</div>', unsafe_allow_html=True)
     with qc:
         st.markdown('<div class="sec-head">Suggested Queries</div>', unsafe_allow_html=True)
-        for q in (queries or []): st.markdown(f'<div class="q-row">→ {q}</div>', unsafe_allow_html=True)
+        for q in (queries or []): st.markdown(f'<div class="q-row">→ {_esc(q)}</div>', unsafe_allow_html=True)
         if not queries: st.markdown(f'<div style="color:{TEXT3};font-size:0.82rem;">No queries suggested.</div>', unsafe_allow_html=True)
 
 def _build_fallback_report_md(result: dict) -> str:
@@ -589,20 +613,23 @@ def _build_fallback_report_md(result: dict) -> str:
         "",
     ]
 
-    swot = (result.get("analysis") or {}).get("swot", {})
-    if swot:
+    swot = (result.get("analysis") or {}).get("swot") or {}
+    if isinstance(swot, dict) and swot:
         lines.append("## SWOT Analysis")
         for q in ["strengths", "weaknesses", "opportunities", "threats"]:
-            items = swot.get(q, [])
-            if items:
-                lines.append(f"\n### {q.title()}")
-                for item in items:
-                    lines.append(f"- {item}")
+            items = swot.get(q) or []
+            if not isinstance(items, list) or not items:
+                continue
+            lines.append(f"\n### {q.title()}")
+            for item in items:
+                lines.append(f"- {item}")
 
-    matrix = (result.get("analysis") or {}).get("comparison_matrix", [])
+    matrix = (result.get("analysis") or {}).get("comparison_matrix") or []
     if matrix:
         lines.append("\n## Competitor Comparison")
         for row in matrix:
+            if not isinstance(row, dict):
+                continue
             lines.append(
                 f"- {row.get('company_name','?')}: "
                 f"{row.get('pricing_tier','?')} | {row.get('primary_strength','?')} | "
@@ -634,32 +661,17 @@ def run_demo_mode(company, industry):
     slot.empty(); bar.empty()
     return {**DEMO_RESULT, "target_company": company, "industry": industry}
 
-def run_live_mode(company, industry):
+def run_live_mode(company, industry, api_key):
     from main import Orchestrator
     slot = st.empty(); bar = st.progress(0)
     slot.markdown(f'<div class="prog-row"><div class="prog-dot"></div>researcher → scanning competitors...</div>', unsafe_allow_html=True)
     bar.progress(0.1)
     with st.spinner(""):
-        result = Orchestrator().run(company=company, industry=industry)
+        result = Orchestrator(api_key=api_key).run(company=company, industry=industry)
     slot.empty(); bar.empty()
     return result
 
-# ── Run ─────────────────────────────────────────────────────────────────────────
-if run_btn:
-    if not company_final or not company_final.strip():
-        st.error("Please select or enter a company name."); st.stop()
-    if not industry_final or not industry_final.strip():
-        st.error("Industry is required."); st.stop()
-    if DEMO:
-        result = run_demo_mode(company_final, industry_final)
-    else:
-        if not os.environ.get("GEMINI_API_KEY", ""):
-            st.error("Paste your Gemini API key in the sidebar first."); st.stop()
-        try:
-            result = run_live_mode(company_final, industry_final)
-        except Exception as e:
-            st.error(f"Pipeline error: {e}"); st.stop()
-
+def _render_result(result, company_final):
     ev = result.get("evaluation", {})
     render_metrics(ev.get("score",0), ev.get("passed",False), result.get("research_results",[]), result.get("iteration",1))
 
@@ -671,7 +683,7 @@ if run_btn:
         st.markdown('<div class="sec-head">Agent Execution Logs</div>', unsafe_allow_html=True)
         for log in result.get("logs", []):
             color = ACCENT if "PASSED" in log else RED if "FAILED" in log else TEXT3
-            st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{color};padding:0.17rem 0;border-bottom:1px solid {BORDER}33;">{log}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{color};padding:0.17rem 0;border-bottom:1px solid {BORDER}33;">{_esc(log)}</div>', unsafe_allow_html=True)
         st.markdown('<div class="sec-head" style="margin-top:1rem;">Full JSON State</div>', unsafe_allow_html=True)
         st.json(result)
 
@@ -687,7 +699,8 @@ if run_btn:
             pdf.add_page()
             pdf.set_font("Helvetica", size=10)
             for raw_line in report_md.split("\n"):
-                safe = raw_line.encode("latin-1", "replace").decode("latin-1")[:200]
+                # multi_cell wraps long lines; do not hard-truncate report content
+                safe = raw_line.encode("latin-1", "replace").decode("latin-1")
                 if safe.strip():
                     pdf.set_x(pdf.l_margin)
                     pdf.multi_cell(pdf.epw, 5, text=safe)
@@ -702,7 +715,29 @@ if run_btn:
             )
     except Exception:
         pass
-else:
+
+# ── Run ─────────────────────────────────────────────────────────────────────────
+if run_btn:
+    if not company_final or not company_final.strip():
+        st.error("Please select or enter a company name."); st.stop()
+    if not industry_final or not industry_final.strip():
+        st.error("Industry is required."); st.stop()
+    if DEMO:
+        result = run_demo_mode(company_final, industry_final)
+    else:
+        if not live_api_key.strip():
+            st.error("Paste your Gemini API key in the sidebar first."); st.stop()
+        try:
+            result = run_live_mode(company_final, industry_final, live_api_key.strip())
+        except Exception as e:
+            st.error(f"Pipeline error: {e}"); st.stop()
+
+    st.session_state.last_result = result
+    st.session_state.last_run_company = company_final
+
+if st.session_state.last_result:
+    _render_result(st.session_state.last_result, st.session_state.last_run_company or company_final)
+elif not run_btn:
     st.markdown(f'<div style="margin-top:5rem;text-align:center;padding:2rem;"><div style="font-size:2.2rem;margin-bottom:1rem;opacity:0.1;">⚡</div><div style="font-family:Space Mono,monospace;font-size:0.68rem;color:{TEXT4};letter-spacing:0.25em;text-transform:uppercase;margin-bottom:0.5rem;">System Ready</div><div style="font-family:Space Mono,monospace;font-size:0.76rem;color:{TEXT3};margin-bottom:0.35rem;">Select a company → click ▶ RUN</div><div style="font-size:0.72rem;color:{TEXT4};">{"Demo mode active — no API key needed" if DEMO else "Live mode — paste your Gemini key in the sidebar"}</div></div>', unsafe_allow_html=True)
 
 # ── Footer ──────────────────────────────────────────────────────────────────────
