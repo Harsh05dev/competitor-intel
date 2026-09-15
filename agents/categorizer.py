@@ -16,7 +16,7 @@ overwrites existing good data.
 
 import os
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -25,6 +25,18 @@ from models.schemas import AgentState
 import config
 
 load_dotenv()
+
+
+def _as_str_list(value) -> List:
+    """Coerce Gemini list-or-string fields without exploding strings into characters."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
 
 SYSTEM_PROMPT = """You are a data structuring specialist. You receive raw research snippets
 about companies and organize them into clean, structured categories.
@@ -51,15 +63,18 @@ Rules:
 
 
 class CategorizerAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
+        self._client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if not api_key:
-                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
+        if not api_key:
+            raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        if self.client is None or self._client_api_key != api_key:
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     def categorize(self, state: AgentState) -> Dict[str, Any]:
@@ -80,14 +95,16 @@ class CategorizerAgent:
         # Build prompt with all raw snippets
         prompt = "Organize the following raw research snippets into structured JSON:\n\n"
         for comp in research_results:
-            name     = comp.get("company_name", "Unknown")
-            snippets = comp.get("raw_snippets", [])
-            sources  = comp.get("sources", [])
+            if not isinstance(comp, dict):
+                continue
+            name     = comp.get("company_name") or "Unknown"
+            snippets = _as_str_list(comp.get("raw_snippets"))
+            sources  = _as_str_list(comp.get("sources"))
             prompt  += f"--- {name} ---\n"
             for s in snippets:
                 prompt += f"  • {s}\n"
             if sources:
-                prompt += f"  Sources: {', '.join(sources[:3])}\n"
+                prompt += f"  Sources: {', '.join(str(s) for s in sources[:3])}\n"
             prompt += "\n"
 
         # Try models
@@ -138,11 +155,19 @@ class CategorizerAgent:
         - New competitors found in re-research: append
         Never overwrites existing data.
         """
-        new_map = {c.get("company_name", "").lower(): c for c in new_data}
+        new_map = {}
+        for c in new_data:
+            if not isinstance(c, dict):
+                continue
+            key = (c.get("company_name") or "").lower()
+            if key:
+                new_map[key] = c
         merged  = []
 
         for comp in existing:
-            key     = comp.get("company_name", "").lower()
+            if not isinstance(comp, dict):
+                continue
+            key     = (comp.get("company_name") or "").lower()
             new_comp = new_map.get(key, {})
 
             # Fill string fields only if missing
@@ -152,15 +177,19 @@ class CategorizerAgent:
 
             # Combine list fields and deduplicate
             for field in ["key_features", "hiring_signals", "recent_news"]:
-                existing_list = comp.get(field) or []
-                new_list      = new_comp.get(field) or []
+                existing_list = _as_str_list(comp.get(field))
+                new_list      = _as_str_list(new_comp.get(field))
                 combined      = existing_list + new_list
                 comp[field]   = list(dict.fromkeys(combined))  # preserves order
 
             merged.append(comp)
 
         # Append any completely new competitors
-        existing_keys = {c.get("company_name", "").lower() for c in existing}
+        existing_keys = {
+            (c.get("company_name") or "").lower()
+            for c in existing
+            if isinstance(c, dict) and (c.get("company_name") or "").lower()
+        }
         for name_key, comp in new_map.items():
             if name_key not in existing_keys:
                 merged.append(comp)
