@@ -10,7 +10,7 @@ This is where organized data becomes actionable intelligence.
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -57,21 +57,26 @@ Rules:
 
 
 class AnalystAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
+        self._client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if not api_key:
-                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
+        if not api_key:
+            raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        if self.client is None or self._client_api_key != api_key:
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     def analyze(self, state: AgentState) -> Dict[str, Any]:
         target      = state.get("target_company", "Unknown")
         industry    = state.get("industry", "")
         competitors = state.get("categorized_competitors", [])
+        iteration   = state.get("iteration", 0)
+        prior_analysis = state.get("analysis", {})
 
         if not competitors:
             print("  [Analyst] No categorized data to analyze")
@@ -84,16 +89,24 @@ class AnalystAgent:
         prompt += "Here is structured data on each competitor:\n\n"
 
         for comp in competitors:
-            prompt += f"### {comp.get('company_name', 'Unknown')}\n"
+            if not isinstance(comp, dict):
+                continue
+            prompt += f"### {comp.get('company_name') or 'Unknown'}\n"
             prompt += f"- Pricing: {comp.get('pricing') or 'Unknown'}\n"
             features = comp.get('key_features') or []
-            prompt += f"- Key Features: {', '.join(features) if features else 'Unknown'}\n"
+            if not isinstance(features, list):
+                features = []
+            prompt += f"- Key Features: {', '.join(str(f) for f in features) if features else 'Unknown'}\n"
             prompt += f"- Target Audience: {comp.get('target_audience') or 'Unknown'}\n"
             prompt += f"- Funding: {comp.get('funding') or 'Unknown'}\n"
             hiring = comp.get('hiring_signals') or []
-            prompt += f"- Hiring Signals: {', '.join(hiring) if hiring else 'None'}\n"
+            if not isinstance(hiring, list):
+                hiring = []
+            prompt += f"- Hiring Signals: {', '.join(str(h) for h in hiring) if hiring else 'None'}\n"
             news = comp.get('recent_news') or []
-            prompt += f"- Recent News: {', '.join(news[:2]) if news else 'None'}\n"
+            if not isinstance(news, list):
+                news = []
+            prompt += f"- Recent News: {', '.join(str(n) for n in news[:2]) if news else 'None'}\n"
             prompt += f"- Customer Sentiment: {comp.get('customer_sentiment') or 'Unknown'}\n\n"
 
         prompt += (
@@ -127,15 +140,22 @@ class AnalystAgent:
                 print(f"  [Analyst] {model} failed: {e}")
 
         if not response:
+            if iteration > 0 and prior_analysis:
+                print("  [Analyst] All models failed — preserving prior analysis")
+                return {"analysis": prior_analysis}
             print("  [Analyst] All models failed — returning empty analysis")
             return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
 
         analysis = self._parse_json_object(response.text or "")
+        if not analysis and iteration > 0 and prior_analysis:
+            print("  [Analyst] Empty analysis response — preserving prior analysis")
+            return {"analysis": prior_analysis}
 
         # Log SWOT depth for visibility
-        swot = analysis.get("swot", {})
+        swot = analysis.get("swot") or {}
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            count = len(swot.get(quadrant, []))
+            items = swot.get(quadrant) if isinstance(swot, dict) else []
+            count = len(items) if isinstance(items, list) else 0
             print(f"  [Analyst] {quadrant}: {count} points")
 
         return {"analysis": analysis}
