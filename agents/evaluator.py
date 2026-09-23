@@ -18,7 +18,7 @@ writes and grades the SWOT, the feedback loop has no credibility.
 
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -27,6 +27,18 @@ from models.schemas import AgentState
 import config
 
 load_dotenv()
+
+
+def _as_str_list(value) -> list:
+    """Coerce Gemini list-or-string fields without exploding strings into characters."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
 
 SYSTEM_PROMPT = """You are a strict quality evaluator for competitive intelligence reports.
 You assess completeness and quality using a structured rubric, then identify specific gaps.
@@ -65,21 +77,26 @@ Return ONLY the JSON object, no other text."""
 
 
 class EvaluatorAgent:
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key
         self.client = None  # initialized lazily on first call
+        self._client_api_key = None
 
     def _get_client(self):
-        if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if not api_key:
-                raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        api_key = self.api_key or os.getenv("GEMINI_API_KEY", "")
+        if not api_key:
+            raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
+        if self.client is None or self._client_api_key != api_key:
             self.client = genai.Client(api_key=api_key)
+            self._client_api_key = api_key
         return self.client
 
     def evaluate(self, state: AgentState) -> Dict[str, Any]:
         target      = state.get("target_company", "Unknown")
-        competitors = state.get("categorized_competitors", [])
-        analysis    = state.get("analysis", {})
+        competitors = state.get("categorized_competitors") or []
+        if not isinstance(competitors, list):
+            competitors = []
+        analysis    = state.get("analysis") or {}
 
         print(f"  [Evaluator] Scoring intelligence report for {target}")
 
@@ -88,21 +105,25 @@ class EvaluatorAgent:
         prompt += f"## Competitors Found ({len(competitors)}):\n"
 
         for comp in competitors:
-            prompt += f"\n### {comp.get('company_name', 'Unknown')}\n"
+            if not isinstance(comp, dict):
+                continue
+            prompt += f"\n### {comp.get('company_name') or 'Unknown'}\n"
             prompt += f"- Pricing: {comp.get('pricing') or 'MISSING'}\n"
-            features = comp.get('key_features') or []
-            prompt += f"- Features: {', '.join(features) if features else 'MISSING'}\n"
+            features = _as_str_list(comp.get('key_features'))
+            prompt += f"- Features: {', '.join(str(f) for f in features) if features else 'MISSING'}\n"
             prompt += f"- Funding: {comp.get('funding') or 'MISSING'}\n"
-            hiring = comp.get('hiring_signals') or []
-            prompt += f"- Hiring: {', '.join(hiring) if hiring else 'MISSING'}\n"
-            news = comp.get('recent_news') or []
-            prompt += f"- News: {', '.join(news[:2]) if news else 'MISSING'}\n"
+            hiring = _as_str_list(comp.get('hiring_signals'))
+            prompt += f"- Hiring: {', '.join(str(h) for h in hiring) if hiring else 'MISSING'}\n"
+            news = _as_str_list(comp.get('recent_news'))
+            prompt += f"- News: {', '.join(str(n) for n in news[:2]) if news else 'MISSING'}\n"
             prompt += f"- Sentiment: {comp.get('customer_sentiment') or 'MISSING'}\n"
 
-        swot = analysis.get("swot", {})
+        swot = analysis.get("swot") or {}
+        if not isinstance(swot, dict):
+            swot = {}
         prompt += f"\n## SWOT Analysis:\n"
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            items = swot.get(quadrant, [])
+            items = _as_str_list(swot.get(quadrant))
             prompt += f"- {quadrant.title()}: {len(items)} points\n"
             for item in items[:3]:
                 prompt += f"  • {item}\n"
@@ -157,7 +178,7 @@ class EvaluatorAgent:
             }
 
         # Calculate weighted score from breakdown
-        score = self._calculate_score(result.get("breakdown", {}))
+        score = self._calculate_score(result.get("breakdown") or {})
         result["score"]  = score
         result["passed"] = score >= config.EVALUATION_THRESHOLD
 
@@ -173,15 +194,35 @@ class EvaluatorAgent:
         Calculate weighted composite score from the 6-criteria breakdown.
         Each criterion is scored 0-10, then weighted by config.EVAL_WEIGHTS.
         """
+        if not isinstance(breakdown, dict):
+            breakdown = {}
         total = 0
         for criterion, weight in config.EVAL_WEIGHTS.items():
             criterion_data = breakdown.get(criterion, {})
             if isinstance(criterion_data, dict):
-                raw_score = criterion_data.get("score", 5)
+                raw_score = self._coerce_score(criterion_data.get("score", 5))
             else:
                 raw_score = 5  # default if parsing was off
             total += (raw_score / 10) * weight
         return int(total)
+
+    def _coerce_score(self, raw_score: Any) -> float:
+        """Normalize model rubric scores to the required 0-10 range."""
+        if isinstance(raw_score, bool):
+            return 5.0
+        if isinstance(raw_score, (int, float)):
+            value = float(raw_score)
+        elif isinstance(raw_score, str):
+            score_text = raw_score.strip()
+            if "/" in score_text:
+                score_text = score_text.split("/", 1)[0].strip()
+            try:
+                value = float(score_text)
+            except ValueError:
+                return 5.0
+        else:
+            return 5.0
+        return max(0.0, min(10.0, value))
 
     def _parse_json_object(self, text: str) -> dict:
         """Extract JSON object from LLM response."""
