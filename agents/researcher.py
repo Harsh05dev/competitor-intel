@@ -21,6 +21,7 @@ from google.genai import types
 
 from models.schemas import AgentState
 import config
+from agents.llm_coerce import as_str_list, coerce_json_list, company_key
 
 load_dotenv()
 
@@ -51,12 +52,15 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        # User-supplied keys stay on this instance. Do not cache them on a
+        # process-wide client, and do not copy them into os.environ.
+        self._api_key = (api_key or "").strip() or None
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self._api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -66,7 +70,8 @@ class ResearcherAgent:
         company   = state.get("target_company", "")
         industry  = state.get("industry", "")
         iteration = state.get("iteration", 0)
-        queries   = state.get("evaluation", {}).get("suggested_queries", [])
+        evaluation = state.get("evaluation") if isinstance(state.get("evaluation"), dict) else {}
+        queries = as_str_list(evaluation.get("suggested_queries"))
 
         if iteration == 0:
             # ── Round 1: broad research ────────────────────────────────────────
@@ -128,11 +133,8 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
-            print("  [Researcher] All models failed — returning empty results")
-            return {
-                "research_results": [],
-                "iteration": iteration,
-            }
+            print("  [Researcher] All models failed")
+            return self._failed_research(state, iteration)
 
         # ── Parse JSON response ────────────────────────────────────────────────
         text = response.text or ""
@@ -140,23 +142,63 @@ class ResearcherAgent:
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
         if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
-            for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
-                if key in existing:
-                    # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
-                    existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
-                else:
-                    existing[key] = new_comp
-            data = list(existing.values())
+            data = self._merge_research(state.get("research_results"), data)
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
             "research_results": data,
             "iteration": iteration,
         }
+
+    def _failed_research(self, state: AgentState, iteration: int) -> Dict[str, Any]:
+        """Keep the previous round when a retry request fails."""
+        existing = state.get("research_results")
+        if iteration > 0 and isinstance(existing, list) and existing:
+            print("  [Researcher] Keeping previous research results")
+            return {"research_results": existing, "iteration": iteration}
+        return {"research_results": [], "iteration": iteration}
+
+    def _merge_research(self, existing_rows, new_rows) -> list:
+        """Append new snippets onto named competitors. Unnamed rows are kept, not indexed."""
+        merged: Dict[str, dict] = {}
+        order: list[str] = []
+        unnamed: list[dict] = []
+
+        for row in existing_rows or []:
+            if not isinstance(row, dict):
+                continue
+            key = company_key(row)
+            if not key:
+                unnamed.append(row)
+                continue
+            if key not in merged:
+                order.append(key)
+                merged[key] = row
+
+        for new_comp in new_rows or []:
+            if not isinstance(new_comp, dict):
+                continue
+            key = company_key(new_comp)
+            if not key:
+                continue
+            if key in merged:
+                current = merged[key]
+                current["raw_snippets"] = as_str_list(
+                    as_str_list(current.get("raw_snippets")) + as_str_list(new_comp.get("raw_snippets"))
+                )
+                current["sources"] = as_str_list(
+                    as_str_list(current.get("sources")) + as_str_list(new_comp.get("sources"))
+                )
+            else:
+                order.append(key)
+                name = new_comp.get("company_name")
+                merged[key] = {
+                    "company_name": name.strip() if isinstance(name, str) else name,
+                    "raw_snippets": as_str_list(new_comp.get("raw_snippets")),
+                    "sources": as_str_list(new_comp.get("sources")),
+                }
+
+        return [merged[key] for key in order] + unnamed
 
     def _parse_json_list(self, text: str) -> list:
         """Extract a JSON array from LLM response, handling markdown fences."""
@@ -173,7 +215,7 @@ class ResearcherAgent:
             print("  [Researcher] Warning: no JSON array found in response")
             return []
         try:
-            return json.loads(cleaned[start:end])
+            return coerce_json_list(json.loads(cleaned[start:end]))
         except json.JSONDecodeError as e:
             print(f"  [Researcher] JSON parse error: {e}")
             return []
