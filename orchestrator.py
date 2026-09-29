@@ -34,6 +34,7 @@ from agents.researcher import ResearcherAgent
 from agents.categorizer import CategorizerAgent
 from agents.analyst import AnalystAgent
 from agents.evaluator import EvaluatorAgent
+from agents.llm_coerce import as_dict_list, as_str_list
 import config
 
 # ── Lazy agent singletons (avoid import-time Gemini client / Streamlit crash) ─
@@ -52,28 +53,55 @@ def _get_agents():
         _evaluator = EvaluatorAgent()
 
 
+def _make_agents(api_key: str | None = None):
+    """Return agents for this run.
+
+    An explicit visitor key gets a fresh set of agents so its Gemini client
+    is never reused for another session. Only the deployment environment key
+    uses the lazy process-wide cache.
+    """
+    key = (api_key or "").strip()
+    if key:
+        return (
+            ResearcherAgent(api_key=key),
+            CategorizerAgent(api_key=key),
+            AnalystAgent(api_key=key),
+            EvaluatorAgent(api_key=key),
+        )
+    _get_agents()
+    return _researcher, _categorizer, _analyst, _evaluator
+
+
 # ── NODE FUNCTIONS ─────────────────────────────────────────────────────────────
 # Each node takes the full AgentState and returns a dict of updated fields.
 # LangGraph merges the returned dict into the existing state automatically.
 
-def researcher_node(state: AgentState) -> dict:
+def researcher_node(state: AgentState, researcher=None) -> dict:
     """
     Node 1 — Researcher
     Round 1: broad search to find competitors.
     Round 2+: targeted search using Evaluator's suggested_queries.
     """
-    # Cap suggested queries to prevent prompt overflow
-    ev = state.get("evaluation", {})
-    if ev.get("suggested_queries"):
+    if researcher is None:
+        _get_agents()
+        researcher = _researcher
+    # Cap suggested queries to prevent prompt overflow.
+    # A single string query must stay one query — slicing the string
+    # turns "Square POS pricing 2025" into the characters S,q,u,a,r,e.
+    ev = state.get("evaluation") or {}
+    if not isinstance(ev, dict):
+        ev = {}
+    queries = as_str_list(ev.get("suggested_queries"))[: config.MAX_GAPS_PER_RETRY]
+    if queries:
         state = {
             **state,
             "evaluation": {
                 **ev,
-                "suggested_queries": ev["suggested_queries"][: config.MAX_GAPS_PER_RETRY],
+                "suggested_queries": queries,
             },
         }
     print(f"\n[Graph] → researcher_node (iteration {state['iteration']})")
-    result = _researcher.research(state)
+    result = researcher.research(state)
     log_entry = f"[Iter {state['iteration']}] Researcher: found {len(result.get('research_results', []))} competitors"
     return {
         **result,
@@ -82,14 +110,17 @@ def researcher_node(state: AgentState) -> dict:
     }
 
 
-def categorizer_node(state: AgentState) -> dict:
+def categorizer_node(state: AgentState, categorizer=None) -> dict:
     """
     Node 2 — Categorizer
     Transforms raw snippets into structured JSON per competitor.
     On iteration 2+, merges new data with existing data (fills gaps only).
     """
+    if categorizer is None:
+        _get_agents()
+        categorizer = _categorizer
     print(f"\n[Graph] → categorizer_node (iteration {state['iteration']})")
-    result = _categorizer.categorize(state)
+    result = categorizer.categorize(state)
     log_entry = f"[Iter {state['iteration']}] Categorizer: structured {len(result.get('categorized_competitors', []))} competitors"
     return {
         **result,
@@ -98,16 +129,20 @@ def categorizer_node(state: AgentState) -> dict:
     }
 
 
-def analyst_node(state: AgentState) -> dict:
+def analyst_node(state: AgentState, analyst=None) -> dict:
     """
     Node 3 — Analyst
     Synthesizes structured competitor data into SWOT analysis,
     comparison matrix, threat ranking, and opportunity gaps.
     """
+    if analyst is None:
+        _get_agents()
+        analyst = _analyst
     print(f"\n[Graph] → analyst_node (iteration {state['iteration']})")
-    result = _analyst.analyze(state)
-    swot = result.get("analysis", {}).get("swot", {})
-    total_points = sum(len(v) for v in swot.values() if isinstance(v, list))
+    result = analyst.analyze(state)
+    analysis = result.get("analysis") if isinstance(result.get("analysis"), dict) else {}
+    swot = analysis.get("swot") if isinstance(analysis.get("swot"), dict) else {}
+    total_points = sum(len(as_str_list(v)) for v in swot.values())
     log_entry = f"[Iter {state['iteration']}] Analyst: generated SWOT with {total_points} points"
     return {
         **result,
@@ -116,15 +151,18 @@ def analyst_node(state: AgentState) -> dict:
     }
 
 
-def evaluator_node(state: AgentState) -> dict:
+def evaluator_node(state: AgentState, evaluator=None) -> dict:
     """
     Node 4 — Evaluator (the quality gate)
     Scores the current output 0-100 on 6 weighted criteria.
     Identifies specific gaps and generates targeted search queries.
     The score determines which path the conditional edge takes.
     """
+    if evaluator is None:
+        _get_agents()
+        evaluator = _evaluator
     print(f"\n[Graph] → evaluator_node (iteration {state['iteration']})")
-    result = _evaluator.evaluate(state)
+    result = evaluator.evaluate(state)
     score  = result.get("evaluation", {}).get("score", 0)
     passed = result.get("evaluation", {}).get("passed", False)
     log_entry = f"[Iter {state['iteration']}] Evaluator: score={score}/100 {'PASSED ✓' if passed else 'FAILED ✗'}"
@@ -143,11 +181,13 @@ def format_report_node(state: AgentState) -> dict:
     No LLM call needed here — just assembles the report from existing state.
     """
     print(f"\n[Graph] → format_report_node")
-    ev    = state.get("evaluation", {})
+    ev    = state.get("evaluation") if isinstance(state.get("evaluation"), dict) else {}
     score = ev.get("score", 0)
+    if not isinstance(score, (int, float)) or isinstance(score, bool):
+        score = 0
     comps = state.get("categorized_competitors", []) or state.get("research_results", [])
-    analysis = state.get("analysis", {})
-    swot  = analysis.get("swot", {})
+    analysis = state.get("analysis") if isinstance(state.get("analysis"), dict) else {}
+    swot  = analysis.get("swot") if isinstance(analysis.get("swot"), dict) else {}
     iters = state["iteration"]
     conf  = "HIGH" if score >= config.EVALUATION_THRESHOLD else "MEDIUM" if score >= 50 else "LOW"
 
@@ -161,14 +201,14 @@ def format_report_node(state: AgentState) -> dict:
     if swot:
         lines.append("## SWOT Analysis")
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            items = swot.get(quadrant, [])
+            items = as_str_list(swot.get(quadrant))
             if items:
                 lines.append(f"\n### {quadrant.title()}")
                 for item in items:
                     lines.append(f"- {item}")
 
     # Comparison matrix
-    matrix = analysis.get("comparison_matrix", [])
+    matrix = as_dict_list(analysis.get("comparison_matrix"))
     if matrix:
         lines.append("\n## Competitor Comparison")
         lines.append("| Company | Pricing | Strength | Weakness | Market | Threat |")
@@ -184,7 +224,7 @@ def format_report_node(state: AgentState) -> dict:
             )
 
     # Opportunity gaps
-    gaps = analysis.get("opportunity_gaps", [])
+    gaps = as_str_list(analysis.get("opportunity_gaps"))
     if gaps:
         lines.append("\n## Opportunity Gaps")
         for g in gaps:
@@ -232,22 +272,27 @@ def route_after_evaluation(state: AgentState) -> str:
 
 # ── GRAPH BUILDER ──────────────────────────────────────────────────────────────
 
-def build_graph():
+def build_graph(api_key: str | None = None):
     """
     Constructs and compiles the LangGraph StateGraph.
 
     Nodes:    researcher, categorizer, analyst, evaluator, format_report
     Edges:    researcher→categorizer→analyst→evaluator (fixed, always)
     Cond edge: evaluator → {retry: researcher, finalize: format_report}
+
+    api_key, when provided, is a visitor key. Agents created from it are
+    closed over by this graph and are not stored on the process-wide cache.
     """
-    _get_agents()
+    researcher, categorizer, analyst, evaluator = _make_agents(api_key)
     graph = StateGraph(AgentState)
 
     # ── Register nodes ─────────────────────────────────────────────────────────
-    graph.add_node("researcher",   researcher_node)
-    graph.add_node("categorizer",  categorizer_node)
-    graph.add_node("analyst",      analyst_node)
-    graph.add_node("evaluator",    evaluator_node)
+    # Default args bind this run's agents. A shared singleton would reuse the
+    # first visitor's Gemini client for every later session.
+    graph.add_node("researcher", lambda state, _agent=researcher: researcher_node(state, _agent))
+    graph.add_node("categorizer", lambda state, _agent=categorizer: categorizer_node(state, _agent))
+    graph.add_node("analyst", lambda state, _agent=analyst: analyst_node(state, _agent))
+    graph.add_node("evaluator", lambda state, _agent=evaluator: evaluator_node(state, _agent))
     graph.add_node("format_report", format_report_node)
 
     # ── Fixed edges (always flow forward) ──────────────────────────────────────
@@ -278,12 +323,12 @@ def build_graph():
 
 # ── PUBLIC API ─────────────────────────────────────────────────────────────────
 
-def run_analysis(company: str, industry: str) -> AgentState:
+def run_analysis(company: str, industry: str, api_key: str | None = None) -> AgentState:
     """
     Main entry point. Takes company + industry, returns the complete final state.
     Called by main.py Orchestrator wrapper and by ui/app.py indirectly.
     """
-    app = build_graph()
+    app = build_graph(api_key=api_key)
 
     initial_state: AgentState = {
         "target_company":          company,
