@@ -17,6 +17,13 @@ from google.genai import types
 
 from models.schemas import AgentState
 import config
+from agents.llm_coerce import (
+    as_dict_list,
+    as_str_list,
+    coerce_json_object,
+    empty_analysis,
+    usable_analysis,
+)
 
 load_dotenv()
 
@@ -57,12 +64,13 @@ Rules:
 
 
 class AnalystAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        self._api_key = (api_key or "").strip() or None
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self._api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -71,11 +79,11 @@ class AnalystAgent:
     def analyze(self, state: AgentState) -> Dict[str, Any]:
         target      = state.get("target_company", "Unknown")
         industry    = state.get("industry", "")
-        competitors = state.get("categorized_competitors", [])
+        competitors = as_dict_list(state.get("categorized_competitors"))
 
         if not competitors:
             print("  [Analyst] No categorized data to analyze")
-            return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
+            return self._keep_or_empty(state, reason="no categorized data")
 
         print(f"  [Analyst] Analyzing {target} against {len(competitors)} competitors")
 
@@ -84,15 +92,15 @@ class AnalystAgent:
         prompt += "Here is structured data on each competitor:\n\n"
 
         for comp in competitors:
-            prompt += f"### {comp.get('company_name', 'Unknown')}\n"
+            prompt += f"### {comp.get('company_name') or 'Unknown'}\n"
             prompt += f"- Pricing: {comp.get('pricing') or 'Unknown'}\n"
-            features = comp.get('key_features') or []
+            features = as_str_list(comp.get("key_features"))
             prompt += f"- Key Features: {', '.join(features) if features else 'Unknown'}\n"
             prompt += f"- Target Audience: {comp.get('target_audience') or 'Unknown'}\n"
             prompt += f"- Funding: {comp.get('funding') or 'Unknown'}\n"
-            hiring = comp.get('hiring_signals') or []
+            hiring = as_str_list(comp.get("hiring_signals"))
             prompt += f"- Hiring Signals: {', '.join(hiring) if hiring else 'None'}\n"
-            news = comp.get('recent_news') or []
+            news = as_str_list(comp.get("recent_news"))
             prompt += f"- Recent News: {', '.join(news[:2]) if news else 'None'}\n"
             prompt += f"- Customer Sentiment: {comp.get('customer_sentiment') or 'Unknown'}\n\n"
 
@@ -128,17 +136,27 @@ class AnalystAgent:
 
         if not response:
             print("  [Analyst] All models failed — returning empty analysis")
-            return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
+            return self._keep_or_empty(state, reason="all models failed")
 
         analysis = self._parse_json_object(response.text or "")
+        if not usable_analysis(analysis):
+            return self._keep_or_empty(state, reason="unusable analysis")
 
         # Log SWOT depth for visibility
-        swot = analysis.get("swot", {})
+        swot = analysis.get("swot") if isinstance(analysis.get("swot"), dict) else {}
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            count = len(swot.get(quadrant, []))
+            count = len(as_str_list(swot.get(quadrant)))
             print(f"  [Analyst] {quadrant}: {count} points")
 
         return {"analysis": analysis}
+
+    def _keep_or_empty(self, state: AgentState, reason: str) -> Dict[str, Any]:
+        """A failed retry must not replace SWOT that an earlier round already produced."""
+        prior = state.get("analysis")
+        if usable_analysis(prior):
+            print(f"  [Analyst] {reason} — keeping previous analysis")
+            return {"analysis": prior}
+        return {"analysis": empty_analysis()}
 
     def _parse_json_object(self, text: str) -> dict:
         """Extract JSON object from LLM response."""
@@ -153,7 +171,7 @@ class AnalystAgent:
             print("  [Analyst] Warning: no JSON object found")
             return {}
         try:
-            return json.loads(cleaned[start:end])
+            return coerce_json_object(json.loads(cleaned[start:end]))
         except json.JSONDecodeError as e:
             print(f"  [Analyst] JSON parse error: {e}")
             return {}
