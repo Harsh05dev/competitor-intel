@@ -23,6 +23,7 @@ from google.genai import types
 
 from models.schemas import AgentState
 import config
+from agents.llm_coerce import as_dict_list, as_str_list, coerce_json_list, company_key
 
 load_dotenv()
 
@@ -51,20 +52,23 @@ Rules:
 
 
 class CategorizerAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        self._api_key = (api_key or "").strip() or None
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self._api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
         return self.client
 
     def categorize(self, state: AgentState) -> Dict[str, Any]:
-        research_results = state.get("research_results", [])
-        existing         = state.get("categorized_competitors", [])
+        research_results = as_dict_list(state.get("research_results"))
+        existing         = state.get("categorized_competitors") or []
+        if not isinstance(existing, list):
+            existing = []
         iteration        = state.get("iteration", 0)
 
         if not research_results:
@@ -80,9 +84,9 @@ class CategorizerAgent:
         # Build prompt with all raw snippets
         prompt = "Organize the following raw research snippets into structured JSON:\n\n"
         for comp in research_results:
-            name     = comp.get("company_name", "Unknown")
-            snippets = comp.get("raw_snippets", [])
-            sources  = comp.get("sources", [])
+            name     = comp.get("company_name") or "Unknown"
+            snippets = as_str_list(comp.get("raw_snippets"))
+            sources  = as_str_list(comp.get("sources"))
             prompt  += f"--- {name} ---\n"
             for s in snippets:
                 prompt += f"  • {s}\n"
@@ -138,31 +142,40 @@ class CategorizerAgent:
         - New competitors found in re-research: append
         Never overwrites existing data.
         """
-        new_map = {c.get("company_name", "").lower(): c for c in new_data}
+        list_fields = ["key_features", "hiring_signals", "recent_news"]
+        new_map = {}
+        for comp in as_dict_list(new_data):
+            key = company_key(comp)
+            if key:
+                new_map[key] = comp
         merged  = []
+        seen = set()
 
-        for comp in existing:
-            key     = comp.get("company_name", "").lower()
-            new_comp = new_map.get(key, {})
+        for comp in as_dict_list(existing):
+            key = company_key(comp)
+            new_comp = new_map.get(key, {}) if key else {}
+            if key:
+                seen.add(key)
 
             # Fill string fields only if missing
             for field in ["pricing", "target_audience", "funding", "customer_sentiment"]:
                 if not comp.get(field) and new_comp.get(field):
                     comp[field] = new_comp[field]
 
-            # Combine list fields and deduplicate
-            for field in ["key_features", "hiring_signals", "recent_news"]:
-                existing_list = comp.get(field) or []
-                new_list      = new_comp.get(field) or []
-                combined      = existing_list + new_list
-                comp[field]   = list(dict.fromkeys(combined))  # preserves order
+            # Combine list fields and deduplicate. Strings stay one entry;
+            # dict rows are flattened to text so they remain hashable.
+            for field in list_fields:
+                comp[field] = as_str_list(
+                    as_str_list(comp.get(field)) + as_str_list(new_comp.get(field))
+                )
 
             merged.append(comp)
 
         # Append any completely new competitors
-        existing_keys = {c.get("company_name", "").lower() for c in existing}
         for name_key, comp in new_map.items():
-            if name_key not in existing_keys:
+            if name_key not in seen:
+                for field in list_fields:
+                    comp[field] = as_str_list(comp.get(field))
                 merged.append(comp)
 
         return merged
@@ -180,7 +193,7 @@ class CategorizerAgent:
             print("  [Categorizer] Warning: no JSON array found")
             return []
         try:
-            return json.loads(cleaned[start:end])
+            return coerce_json_list(json.loads(cleaned[start:end]))
         except json.JSONDecodeError as e:
             print(f"  [Categorizer] JSON parse error: {e}")
             return []

@@ -25,6 +25,7 @@ from google.genai import types
 
 from models.schemas import AgentState
 import config
+from agents.llm_coerce import as_dict_list, as_str_list, coerce_json_object, coerce_rubric_score
 
 load_dotenv()
 
@@ -65,12 +66,13 @@ Return ONLY the JSON object, no other text."""
 
 
 class EvaluatorAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        self._api_key = (api_key or "").strip() or None
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self._api_key or os.getenv("GEMINI_API_KEY", "")
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -78,8 +80,8 @@ class EvaluatorAgent:
 
     def evaluate(self, state: AgentState) -> Dict[str, Any]:
         target      = state.get("target_company", "Unknown")
-        competitors = state.get("categorized_competitors", [])
-        analysis    = state.get("analysis", {})
+        competitors = as_dict_list(state.get("categorized_competitors"))
+        analysis    = state.get("analysis") if isinstance(state.get("analysis"), dict) else {}
 
         print(f"  [Evaluator] Scoring intelligence report for {target}")
 
@@ -88,21 +90,21 @@ class EvaluatorAgent:
         prompt += f"## Competitors Found ({len(competitors)}):\n"
 
         for comp in competitors:
-            prompt += f"\n### {comp.get('company_name', 'Unknown')}\n"
+            prompt += f"\n### {comp.get('company_name') or 'Unknown'}\n"
             prompt += f"- Pricing: {comp.get('pricing') or 'MISSING'}\n"
-            features = comp.get('key_features') or []
+            features = as_str_list(comp.get("key_features"))
             prompt += f"- Features: {', '.join(features) if features else 'MISSING'}\n"
             prompt += f"- Funding: {comp.get('funding') or 'MISSING'}\n"
-            hiring = comp.get('hiring_signals') or []
+            hiring = as_str_list(comp.get("hiring_signals"))
             prompt += f"- Hiring: {', '.join(hiring) if hiring else 'MISSING'}\n"
-            news = comp.get('recent_news') or []
+            news = as_str_list(comp.get("recent_news"))
             prompt += f"- News: {', '.join(news[:2]) if news else 'MISSING'}\n"
             prompt += f"- Sentiment: {comp.get('customer_sentiment') or 'MISSING'}\n"
 
-        swot = analysis.get("swot", {})
+        swot = analysis.get("swot") if isinstance(analysis.get("swot"), dict) else {}
         prompt += f"\n## SWOT Analysis:\n"
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            items = swot.get(quadrant, [])
+            items = as_str_list(swot.get(quadrant))
             prompt += f"- {quadrant.title()}: {len(items)} points\n"
             for item in items[:3]:
                 prompt += f"  • {item}\n"
@@ -149,15 +151,20 @@ class EvaluatorAgent:
 
         result = self._parse_json_object(response.text or "")
 
-        if "error" in result or not result:
+        if not isinstance(result, dict) or "error" in result or not result:
             result = {
                 "breakdown":         {},
                 "gaps":              ["Evaluation parsing failed"],
                 "suggested_queries": []
             }
 
+        result["gaps"] = as_str_list(result.get("gaps"))
+        result["suggested_queries"] = as_str_list(result.get("suggested_queries"))
+        if not isinstance(result.get("breakdown"), dict):
+            result["breakdown"] = {}
+
         # Calculate weighted score from breakdown
-        score = self._calculate_score(result.get("breakdown", {}))
+        score = self._calculate_score(result.get("breakdown"))
         result["score"]  = score
         result["passed"] = score >= config.EVALUATION_THRESHOLD
 
@@ -173,13 +180,15 @@ class EvaluatorAgent:
         Calculate weighted composite score from the 6-criteria breakdown.
         Each criterion is scored 0-10, then weighted by config.EVAL_WEIGHTS.
         """
-        total = 0
+        if not isinstance(breakdown, dict):
+            breakdown = {}
+        total = 0.0
         for criterion, weight in config.EVAL_WEIGHTS.items():
             criterion_data = breakdown.get(criterion, {})
             if isinstance(criterion_data, dict):
-                raw_score = criterion_data.get("score", 5)
+                raw_score = coerce_rubric_score(criterion_data.get("score", 5))
             else:
-                raw_score = 5  # default if parsing was off
+                raw_score = coerce_rubric_score(criterion_data)
             total += (raw_score / 10) * weight
         return int(total)
 
@@ -196,7 +205,7 @@ class EvaluatorAgent:
             print("  [Evaluator] Warning: no JSON object found")
             return {}
         try:
-            return json.loads(cleaned[start:end])
+            return coerce_json_object(json.loads(cleaned[start:end]))
         except json.JSONDecodeError as e:
             print(f"  [Evaluator] JSON parse error: {e}")
             return {}
