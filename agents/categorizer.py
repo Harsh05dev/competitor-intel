@@ -22,6 +22,14 @@ from google import genai
 from google.genai import types
 
 from models.schemas import AgentState
+from agents.llm_coerce import (
+    as_dict_list,
+    as_str_list,
+    company_name,
+    competitor_has_content,
+    fill_competitor,
+    normalize_competitor,
+)
 import config
 
 load_dotenv()
@@ -51,21 +59,25 @@ Rules:
 
 
 class CategorizerAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        cleaned = (api_key or "").strip()
+        self._api_key = cleaned or None
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self._api_key or os.getenv("GEMINI_API_KEY", "").strip()
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
         return self.client
 
     def categorize(self, state: AgentState) -> Dict[str, Any]:
-        research_results = state.get("research_results", [])
-        existing         = state.get("categorized_competitors", [])
-        iteration        = state.get("iteration", 0)
+        existing = state.get("categorized_competitors")
+        if not isinstance(existing, list):
+            existing = []
+        iteration = state.get("iteration", 0)
+        research_results = as_dict_list(state.get("research_results"))
 
         if not research_results:
             print("  [Categorizer] No research results to categorize")
@@ -80,12 +92,12 @@ class CategorizerAgent:
         # Build prompt with all raw snippets
         prompt = "Organize the following raw research snippets into structured JSON:\n\n"
         for comp in research_results:
-            name     = comp.get("company_name", "Unknown")
-            snippets = comp.get("raw_snippets", [])
-            sources  = comp.get("sources", [])
-            prompt  += f"--- {name} ---\n"
-            for s in snippets:
-                prompt += f"  • {s}\n"
+            name = company_name(comp) or "Unknown"
+            snippets = as_str_list(comp.get("raw_snippets"))
+            sources = as_str_list(comp.get("sources"))
+            prompt += f"--- {name} ---\n"
+            for snippet in snippets:
+                prompt += f"  • {snippet}\n"
             if sources:
                 prompt += f"  Sources: {', '.join(sources[:3])}\n"
             prompt += "\n"
@@ -118,16 +130,28 @@ class CategorizerAgent:
             print("  [Categorizer] All models failed — returning existing data")
             return {"categorized_competitors": existing}
 
-        new_data = self._parse_json_list(response.text or "")
+        new_data = as_dict_list(self._parse_json_list(response.text or ""))
+        normalized = self._normalize_rows(new_data)
 
         # On iteration 2+, merge with existing rather than replacing
         if iteration > 0 and existing:
-            merged = self._merge(existing, new_data)
+            merged = self._merge(existing, normalized)
             print(f"  [Categorizer] Merged — {len(merged)} competitors total")
             return {"categorized_competitors": merged}
 
-        print(f"  [Categorizer] Structured {len(new_data)} competitors")
-        return {"categorized_competitors": new_data}
+        print(f"  [Categorizer] Structured {len(normalized)} competitors")
+        return {"categorized_competitors": normalized}
+
+    def _normalize_rows(self, rows: List[dict]) -> List[dict]:
+        normalized = []
+        for row in as_dict_list(rows):
+            item = normalize_competitor(row)
+            if not item["company_name"]:
+                if not competitor_has_content(item):
+                    continue
+                item["company_name"] = "Unknown"
+            normalized.append(item)
+        return normalized
 
     def _merge(self, existing: List[dict], new_data: List[dict]) -> List[dict]:
         """
@@ -138,33 +162,34 @@ class CategorizerAgent:
         - New competitors found in re-research: append
         Never overwrites existing data.
         """
-        new_map = {c.get("company_name", "").lower(): c for c in new_data}
-        merged  = []
+        prepared_new = self._normalize_rows(new_data)
+        new_map = {}
+        unnamed = []
+        for comp in prepared_new:
+            key = comp.get("company_name", "").strip().lower()
+            if not key or key == "unknown":
+                unnamed.append(comp)
+                continue
+            new_map[key] = comp
 
-        for comp in existing:
-            key     = comp.get("company_name", "").lower()
-            new_comp = new_map.get(key, {})
+        merged = []
+        seen = set()
+        for comp in as_dict_list(existing):
+            current = normalize_competitor(comp)
+            key = current.get("company_name", "").strip().lower()
+            if key and key in new_map:
+                current = fill_competitor(current, new_map[key])
+                seen.add(key)
+            elif not key:
+                if not competitor_has_content(current):
+                    continue
+                current["company_name"] = "Unknown"
+            merged.append(current)
 
-            # Fill string fields only if missing
-            for field in ["pricing", "target_audience", "funding", "customer_sentiment"]:
-                if not comp.get(field) and new_comp.get(field):
-                    comp[field] = new_comp[field]
-
-            # Combine list fields and deduplicate
-            for field in ["key_features", "hiring_signals", "recent_news"]:
-                existing_list = comp.get(field) or []
-                new_list      = new_comp.get(field) or []
-                combined      = existing_list + new_list
-                comp[field]   = list(dict.fromkeys(combined))  # preserves order
-
-            merged.append(comp)
-
-        # Append any completely new competitors
-        existing_keys = {c.get("company_name", "").lower() for c in existing}
         for name_key, comp in new_map.items():
-            if name_key not in existing_keys:
+            if name_key not in seen:
                 merged.append(comp)
-
+        merged.extend(unnamed)
         return merged
 
     def _parse_json_list(self, text: str) -> list:
