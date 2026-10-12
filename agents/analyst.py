@@ -16,6 +16,14 @@ from google import genai
 from google.genai import types
 
 from models.schemas import AgentState
+from agents.llm_coerce import (
+    analysis_usable,
+    as_dict_list,
+    as_str_list,
+    as_text,
+    company_name,
+    normalize_analysis,
+)
 import config
 
 load_dotenv()
@@ -57,25 +65,37 @@ Rules:
 
 
 class AnalystAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        cleaned = (api_key or "").strip()
+        self._api_key = cleaned or None
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self._api_key or os.getenv("GEMINI_API_KEY", "").strip()
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
         return self.client
 
+    def _keep_prior(self, state: AgentState, candidate: Any) -> Dict[str, Any] | None:
+        """On a retry, ignore an empty or null analysis so the previous SWOT survives."""
+        if state.get("iteration", 0) <= 0:
+            return None
+        prior = state.get("analysis")
+        if analysis_usable(prior) and not analysis_usable(candidate):
+            return prior
+        return None
+
     def analyze(self, state: AgentState) -> Dict[str, Any]:
         target      = state.get("target_company", "Unknown")
         industry    = state.get("industry", "")
-        competitors = state.get("categorized_competitors", [])
+        competitors = as_dict_list(state.get("categorized_competitors"))
 
         if not competitors:
             print("  [Analyst] No categorized data to analyze")
-            return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
+            prior = self._keep_prior(state, None)
+            return {"analysis": prior if prior is not None else normalize_analysis({})}
 
         print(f"  [Analyst] Analyzing {target} against {len(competitors)} competitors")
 
@@ -84,17 +104,17 @@ class AnalystAgent:
         prompt += "Here is structured data on each competitor:\n\n"
 
         for comp in competitors:
-            prompt += f"### {comp.get('company_name', 'Unknown')}\n"
-            prompt += f"- Pricing: {comp.get('pricing') or 'Unknown'}\n"
-            features = comp.get('key_features') or []
+            features = as_str_list(comp.get("key_features"))
+            hiring = as_str_list(comp.get("hiring_signals"))
+            news = as_str_list(comp.get("recent_news"))
+            prompt += f"### {company_name(comp) or 'Unknown'}\n"
+            prompt += f"- Pricing: {as_text(comp.get('pricing')) or 'Unknown'}\n"
             prompt += f"- Key Features: {', '.join(features) if features else 'Unknown'}\n"
-            prompt += f"- Target Audience: {comp.get('target_audience') or 'Unknown'}\n"
-            prompt += f"- Funding: {comp.get('funding') or 'Unknown'}\n"
-            hiring = comp.get('hiring_signals') or []
+            prompt += f"- Target Audience: {as_text(comp.get('target_audience')) or 'Unknown'}\n"
+            prompt += f"- Funding: {as_text(comp.get('funding')) or 'Unknown'}\n"
             prompt += f"- Hiring Signals: {', '.join(hiring) if hiring else 'None'}\n"
-            news = comp.get('recent_news') or []
             prompt += f"- Recent News: {', '.join(news[:2]) if news else 'None'}\n"
-            prompt += f"- Customer Sentiment: {comp.get('customer_sentiment') or 'Unknown'}\n\n"
+            prompt += f"- Customer Sentiment: {as_text(comp.get('customer_sentiment')) or 'Unknown'}\n\n"
 
         prompt += (
             f"Produce a SWOT analysis for {target} relative to these competitors, "
@@ -127,15 +147,25 @@ class AnalystAgent:
                 print(f"  [Analyst] {model} failed: {e}")
 
         if not response:
+            prior = self._keep_prior(state, None)
+            if prior is not None:
+                print("  [Analyst] All models failed — keeping previous analysis")
+                return {"analysis": prior}
             print("  [Analyst] All models failed — returning empty analysis")
-            return {"analysis": {"swot": {}, "comparison_matrix": [], "threat_ranking": [], "opportunity_gaps": []}}
+            return {"analysis": normalize_analysis({})}
 
         analysis = self._parse_json_object(response.text or "")
+        prior = self._keep_prior(state, analysis)
+        if prior is not None:
+            print("  [Analyst] Retry response had no usable analysis — keeping previous analysis")
+            return {"analysis": prior}
+
+        analysis = normalize_analysis(analysis)
 
         # Log SWOT depth for visibility
-        swot = analysis.get("swot", {})
+        swot = analysis.get("swot") or {}
         for quadrant in ["strengths", "weaknesses", "opportunities", "threats"]:
-            count = len(swot.get(quadrant, []))
+            count = len(as_str_list(swot.get(quadrant)))
             print(f"  [Analyst] {quadrant}: {count} points")
 
         return {"analysis": analysis}

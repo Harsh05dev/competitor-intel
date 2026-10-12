@@ -20,6 +20,7 @@ from google import genai
 from google.genai import types
 
 from models.schemas import AgentState
+from agents.llm_coerce import as_dict_list, as_str_list, merge_research_results, normalize_research_row
 import config
 
 load_dotenv()
@@ -51,12 +52,15 @@ Return ONLY the JSON array, no other text."""
 
 
 class ResearcherAgent:
-    def __init__(self):
+    def __init__(self, api_key: str | None = None):
+        cleaned = (api_key or "").strip()
+        # Explicit visitor keys stay on this instance. Never read them back from os.environ.
+        self._api_key = cleaned or None
         self.client = None  # initialized lazily on first call
 
     def _get_client(self):
         if self.client is None:
-            api_key = os.getenv("GEMINI_API_KEY", "")
+            api_key = self._api_key or os.getenv("GEMINI_API_KEY", "").strip()
             if not api_key:
                 raise ValueError("No GEMINI_API_KEY set. Please enter your API key.")
             self.client = genai.Client(api_key=api_key)
@@ -66,7 +70,11 @@ class ResearcherAgent:
         company   = state.get("target_company", "")
         industry  = state.get("industry", "")
         iteration = state.get("iteration", 0)
-        queries   = state.get("evaluation", {}).get("suggested_queries", [])
+        evaluation = state.get("evaluation") if isinstance(state.get("evaluation"), dict) else {}
+        queries = as_str_list(evaluation.get("suggested_queries"))[: config.MAX_GAPS_PER_RETRY]
+        existing_results = state.get("research_results")
+        if not isinstance(existing_results, list):
+            existing_results = []
 
         if iteration == 0:
             # ── Round 1: broad research ────────────────────────────────────────
@@ -128,6 +136,13 @@ class ResearcherAgent:
                     print(f"  [Researcher] {model} also failed without grounding: {e2}")
 
         if not response:
+            # A retry failure must not wipe competitors gathered on the previous pass.
+            if iteration > 0 and existing_results:
+                print("  [Researcher] All models failed — keeping previous research results")
+                return {
+                    "research_results": existing_results,
+                    "iteration": iteration,
+                }
             print("  [Researcher] All models failed — returning empty results")
             return {
                 "research_results": [],
@@ -136,21 +151,13 @@ class ResearcherAgent:
 
         # ── Parse JSON response ────────────────────────────────────────────────
         text = response.text or ""
-        data = self._parse_json_list(text)
+        data = as_dict_list(self._parse_json_list(text))
 
         # ── Merge with existing results on iteration 2+ ────────────────────────
-        if iteration > 0 and state.get("research_results"):
-            existing = {r["company_name"].lower(): r for r in state["research_results"]}
-            for new_comp in data:
-                key = new_comp.get("company_name", "").lower()
-                if key in existing:
-                    # Append new snippets to existing ones, deduplicate
-                    combined = existing[key]["raw_snippets"] + new_comp.get("raw_snippets", [])
-                    existing[key]["raw_snippets"] = list(dict.fromkeys(combined))
-                    existing[key]["sources"] += new_comp.get("sources", [])
-                else:
-                    existing[key] = new_comp
-            data = list(existing.values())
+        if iteration > 0 and existing_results:
+            data = merge_research_results(existing_results, data)
+        else:
+            data = [normalize_research_row(row) for row in data]
 
         print(f"  [Researcher] Returning data for {len(data)} competitors")
         return {
