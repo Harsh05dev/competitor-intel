@@ -24,9 +24,11 @@ class Orchestrator:
     which does: from main import Orchestrator
     """
 
-    def run(self, company: str = "Stripe", industry: str = "fintech") -> dict:
+    def run(self, company: str = "Stripe", industry: str = "fintech", api_key: str | None = None) -> dict:
         """
         Run the full LangGraph agentic pipeline and return the final state.
+
+        api_key, when provided, is used only for this run and is not stored in os.environ.
 
         The returned state dict contains:
           - evaluation: {score, passed, gaps, suggested_queries, breakdown}
@@ -38,7 +40,7 @@ class Orchestrator:
           - logs: full execution trace
           - status: "complete"
         """
-        return run_analysis(company=company, industry=industry)
+        return run_analysis(company=company, industry=industry, api_key=api_key)
 
 
 if __name__ == "__main__":
