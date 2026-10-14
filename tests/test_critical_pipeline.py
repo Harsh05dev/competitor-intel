@@ -352,6 +352,21 @@ def test_analyst_null_fields_do_not_crash_and_retry_keeps_prior_swot():
     })
     assert replaced["analysis"]["swot"]["strengths"] == ["new"]
 
+    _install(agent, text=json.dumps({
+        "swot": None,
+        "comparison_matrix": [{"company_name": "Adyen", "threat_level": "High"}],
+        "opportunity_gaps": ["new gap"],
+    }))
+    kept = agent.analyze({
+        "target_company": "Stripe",
+        "industry": "fintech",
+        "iteration": 1,
+        "categorized_competitors": [{"company_name": "Square", "key_features": ["pos"]}],
+        "analysis": prior,
+    })
+    assert kept["analysis"]["swot"]["strengths"] == ["API"]
+    assert kept["analysis"]["threat_ranking"] == ["Square"]
+
 
 def test_analyst_node_null_swot_does_not_crash():
     class FakeAnalyst:

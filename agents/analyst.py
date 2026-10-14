@@ -23,6 +23,7 @@ from agents.llm_coerce import (
     as_text,
     company_name,
     normalize_analysis,
+    swot_point_count,
 )
 import config
 
@@ -79,11 +80,24 @@ class AnalystAgent:
         return self.client
 
     def _keep_prior(self, state: AgentState, candidate: Any) -> Dict[str, Any] | None:
-        """On a retry, ignore an empty or null analysis so the previous SWOT survives."""
+        """On a retry, ignore an empty or null SWOT so the previous analysis survives.
+
+        A payload that only adds a matrix or gaps while setting ``swot`` to null is
+        still unusable: replacing the prior report would drop the SWOT already built.
+        A new SWOT that contains points still replaces the prior analysis.
+        """
         if state.get("iteration", 0) <= 0:
             return None
         prior = state.get("analysis")
-        if analysis_usable(prior) and not analysis_usable(candidate):
+        if not analysis_usable(prior):
+            return None
+        prior_points = swot_point_count(prior.get("swot") if isinstance(prior, dict) else None)
+        candidate_points = swot_point_count(
+            candidate.get("swot") if isinstance(candidate, dict) else None
+        )
+        if prior_points > 0 and candidate_points == 0:
+            return prior
+        if not analysis_usable(candidate):
             return prior
         return None
 
