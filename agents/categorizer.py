@@ -15,13 +15,13 @@ overwrites existing good data.
 """
 
 import os
-import json
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
 from models.schemas import AgentState
+from .json_extract import parse_json_list
 import config
 
 load_dotenv()
@@ -168,19 +168,11 @@ class CategorizerAgent:
         return merged
 
     def _parse_json_list(self, text: str) -> list:
-        """Extract JSON array from LLM response."""
-        cleaned = text.strip()
-        if "```" in cleaned:
-            lines   = cleaned.split("\n")
-            lines   = [l for l in lines if not l.strip().startswith("```")]
-            cleaned = "\n".join(lines)
-        start = cleaned.find("[")
-        end   = cleaned.rfind("]") + 1
-        if start == -1 or end == 0:
+        """Extract competitor rows from an LLM response.
+
+        Citation markers and a single competitor object must not erase the payload.
+        """
+        data = parse_json_list(text)
+        if text and text.strip() and not data:
             print("  [Categorizer] Warning: no JSON array found")
-            return []
-        try:
-            return json.loads(cleaned[start:end])
-        except json.JSONDecodeError as e:
-            print(f"  [Categorizer] JSON parse error: {e}")
-            return []
+        return data
