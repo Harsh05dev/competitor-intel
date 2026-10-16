@@ -17,13 +17,13 @@ writes and grades the SWOT, the feedback loop has no credibility.
 """
 
 import os
-import json
 from typing import Dict, Any
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
 from models.schemas import AgentState
+from .json_extract import parse_json_object
 import config
 
 load_dotenv()
@@ -184,19 +184,11 @@ class EvaluatorAgent:
         return int(total)
 
     def _parse_json_object(self, text: str) -> dict:
-        """Extract JSON object from LLM response."""
-        cleaned = text.strip()
-        if "```" in cleaned:
-            lines   = cleaned.split("\n")
-            lines   = [l for l in lines if not l.strip().startswith("```")]
-            cleaned = "\n".join(lines)
-        start = cleaned.find("{")
-        end   = cleaned.rfind("}") + 1
-        if start == -1 or end == 0:
+        """Extract an evaluation object from an LLM response.
+
+        A brace in the preamble must not cause the rubric object to be dropped.
+        """
+        data = parse_json_object(text)
+        if text and text.strip() and not data:
             print("  [Evaluator] Warning: no JSON object found")
-            return {}
-        try:
-            return json.loads(cleaned[start:end])
-        except json.JSONDecodeError as e:
-            print(f"  [Evaluator] JSON parse error: {e}")
-            return {}
+        return data
